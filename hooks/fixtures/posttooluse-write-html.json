@@ -1,0 +1,1 @@
+{"hook_event_name":"PostToolUse","tool_name":"Write","tool_input":{"file_path":"/tmp/hook-test-foo.html","content":"<!doctype html><html><body>hi</body></html>"}}

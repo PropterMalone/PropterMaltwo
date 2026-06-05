@@ -1,0 +1,1 @@
+{"hook_event_name":"PreToolUse","tool_name":"WebFetch","tool_input":{"url":"http://localhost:3000/admin","prompt":"summarize"}}

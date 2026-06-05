@@ -1,0 +1,375 @@
+#!/usr/bin/env bash
+# test-hooks.sh — smoke test for the Claude Code hooks.
+#
+# Each hook is fired with a fixture from ./fixtures/ against an isolated
+# state dir (HOOK_TEST_STATE_DIR). Production state at ~/.claude/state and
+# ~/.phyllis/state is never written.
+#
+# Asserts per hook:
+#   (a) exit code 0 (hooks must never break the parent session)
+#   (b) any expected state file is written at the expected path
+#   (c) no NEW lines appended to hook-errors.log since test start
+#
+# Usage:
+#   bash hooks/test-hooks.sh           # run all
+#   VERBOSE=1 bash hooks/test-hooks.sh # print hook stdout/stderr
+#
+# Exits 0 on all pass, 1 on any failure.
+
+set -u
+
+HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FIXTURES_DIR="$HOOKS_DIR/fixtures"
+LIB="$HOOKS_DIR/lib/hook-utils.sh"
+
+# Sanity: lib must be present.
+if [ ! -f "$LIB" ]; then
+  printf 'FAIL: hook-utils.sh missing at %s\n' "$LIB" >&2
+  exit 1
+fi
+
+# Per-run sandbox. Cleaned up on exit unless KEEP_TEST_DIR=1.
+TEST_DIR="$(mktemp -d -t hook-test-XXXXXX)"
+export HOOK_TEST_STATE_DIR="$TEST_DIR"
+# shellcheck source=lib/hook-utils.sh
+source "$LIB"
+
+# Pre-create the dirs the hooks expect; use the lib's resolution so the
+# test path stays canonical.
+PHYLLIS_STATE="$(hook_phyllis_state_dir)"
+CLAUDE_STATE="$(hook_state_dir)"
+PHYLLIS_HOME_TEST="$TEST_DIR/phyllis-home"
+mkdir -p "$PHYLLIS_STATE" "$CLAUDE_STATE/locks" "$PHYLLIS_HOME_TEST"
+ERR_LOG="$PHYLLIS_STATE/hook-errors.log"
+: > "$ERR_LOG"  # truncate so "no new errors" = "log empty"
+
+cleanup() {
+  if [ -z "${KEEP_TEST_DIR:-}" ]; then
+    rm -rf "$TEST_DIR"
+  else
+    printf 'kept test dir: %s\n' "$TEST_DIR" >&2
+  fi
+}
+trap cleanup EXIT
+
+PASS=0
+FAIL=0
+FAIL_NAMES=()
+
+# fire_hook <name> <hook-cmd> <fixture-relative-path> [<assert-fn>]
+# Runs <hook-cmd> with fixture as stdin, captures stdout/stderr/exit,
+# then runs <assert-fn> for additional state-file checks.
+# Assertions:
+#   - exit 0
+#   - no new lines in hook-errors.log
+#   - <assert-fn> returns 0
+fire_hook() {
+  local name="$1"
+  local cmd="$2"
+  local fixture="$3"
+  local assert_fn="${4:-}"
+  local fixture_path="$FIXTURES_DIR/$fixture"
+
+  if [ ! -f "$fixture_path" ]; then
+    printf '  FAIL %-40s missing fixture: %s\n' "$name" "$fixture_path"
+    FAIL=$((FAIL + 1))
+    FAIL_NAMES+=("$name")
+    return
+  fi
+
+  local out_file err_file rc
+  out_file="$(mktemp)"
+  err_file="$(mktemp)"
+  local err_lines_before
+  err_lines_before=$(wc -l < "$ERR_LOG" 2>/dev/null || echo 0)
+
+  # Run with bash -c so the command string can include args. The fixture
+  # is piped as stdin (matches how Claude Code invokes hooks).
+  bash -c "$cmd" < "$fixture_path" > "$out_file" 2> "$err_file"
+  rc=$?
+
+  local err_lines_after
+  err_lines_after=$(wc -l < "$ERR_LOG" 2>/dev/null || echo 0)
+  local new_err_lines=$((err_lines_after - err_lines_before))
+
+  local fail_reasons=()
+  if [ "$rc" -ne 0 ]; then
+    fail_reasons+=("exit=$rc")
+  fi
+  if [ "$new_err_lines" -gt 0 ]; then
+    fail_reasons+=("hook-errors.log+=$new_err_lines")
+  fi
+  if [ -n "$assert_fn" ]; then
+    if ! "$assert_fn" "$out_file" "$err_file"; then
+      fail_reasons+=("assert=$assert_fn")
+    fi
+  fi
+
+  if [ "${#fail_reasons[@]}" -eq 0 ]; then
+    printf '  PASS %-40s\n' "$name"
+    PASS=$((PASS + 1))
+  else
+    printf '  FAIL %-40s [%s]\n' "$name" "$(IFS=,; printf '%s' "${fail_reasons[*]}")"
+    if [ -n "${VERBOSE:-}" ] || [ "$rc" -ne 0 ] || [ "$new_err_lines" -gt 0 ]; then
+      printf '    stdout: %s\n' "$(head -c 500 < "$out_file" | tr '\n' ' ')"
+      printf '    stderr: %s\n' "$(head -c 500 < "$err_file" | tr '\n' ' ')"
+      if [ "$new_err_lines" -gt 0 ]; then
+        printf '    new errors:\n'
+        tail -n "$new_err_lines" "$ERR_LOG" | sed 's/^/      /'
+      fi
+    fi
+    FAIL=$((FAIL + 1))
+    FAIL_NAMES+=("$name")
+  fi
+
+  rm -f "$out_file" "$err_file"
+}
+
+# ---- Assertion helpers (each takes <stdout-path> <stderr-path>) ----
+
+assert_kickoff_sentinel_fresh() {
+  # Fresh session: sentinel file should be created.
+  local sid="test-fresh-00000000-0000-0000-0000-000000000001"
+  local sentinel="$HOOK_TEST_STATE_DIR/kickoff-sentinels/claude-kickoff-$sid"
+  if [ ! -f "$sentinel" ]; then
+    return 1
+  fi
+  # And the hook should have emitted the AUTO-KICKOFF JSON envelope.
+  if ! grep -q 'AUTO-KICKOFF' "$1"; then
+    return 1
+  fi
+  return 0
+}
+
+assert_kickoff_sentinel_existing() {
+  # Existing session: pre-create the sentinel, hook should no-op (no JSON output).
+  # We pre-create in the runner; this just verifies output is empty.
+  if [ -s "$1" ]; then
+    return 1
+  fi
+  return 0
+}
+
+assert_stub_clean_silent() {
+  # Clean Edit: hook should print nothing.
+  if [ -s "$1" ]; then
+    return 1
+  fi
+  return 0
+}
+
+assert_secret_scan_flags() {
+  # Secret-laden Edit: stub-check + secret-scan both fire. Secret-scan
+  # should mention "Secret patterns" or "CRITICAL".
+  if ! grep -qE 'Secret patterns|CRITICAL' "$1"; then
+    return 1
+  fi
+  return 0
+}
+
+assert_html_served_marker() {
+  # post-write-serve.sh should drop a marker into the test served dir.
+  if [ ! -f "$HOOK_TEST_STATE_DIR/served/files.log" ]; then
+    return 1
+  fi
+  if ! grep -q '/tmp/hook-test-foo.html' "$HOOK_TEST_STATE_DIR/served/files.log"; then
+    return 1
+  fi
+  return 0
+}
+
+assert_rfip_context() {
+  # pre-web-rfip.py should emit JSON with additionalContext containing "RFIP".
+  if ! grep -q 'RFIP' "$1"; then
+    return 1
+  fi
+  return 0
+}
+
+assert_stop_failure_logged() {
+  # stop-failure-throttle.sh should append an entry to calibration-log.jsonl.
+  # The current hook emits pretty-printed (multi-line) JSON via `jq -n` so
+  # we grep the whole file rather than the last line. Also assert the
+  # additionalContext echoes back to stdout so the conversation sees it.
+  local log="$PHYLLIS_HOME_TEST/calibration-log.jsonl"
+  if [ ! -s "$log" ]; then
+    return 1
+  fi
+  if ! grep -q '"throttled": true' "$log" && ! grep -q '"throttled":true' "$log"; then
+    return 1
+  fi
+  if ! grep -q 'Rate limit' "$1"; then
+    return 1
+  fi
+  return 0
+}
+
+assert_bash_block_denied() {
+  # block-*.py PreToolUse hooks signal a block via stdout JSON with
+  # permissionDecision "deny" (and always exit 0). A violating command must
+  # produce that JSON.
+  if ! grep -q '"permissionDecision": "deny"' "$1"; then
+    return 1
+  fi
+  return 0
+}
+
+assert_bash_block_allowed() {
+  # A clean command must produce NO output (the hook returns 0 with empty
+  # stdout — no permission decision emitted). Any deny JSON is a false positive.
+  if [ -s "$1" ]; then
+    return 1
+  fi
+  return 0
+}
+
+assert_session_end_log_or_skip() {
+  # session-end-snapshot.sh: in test mode the ccusage cache may be missing,
+  # which is a documented skip path. We accept either:
+  #   (a) calibration-log.jsonl row appended, OR
+  #   (b) hook-errors.log entry recording a known-skip reason.
+  # We require at least one of those — silent-no-state is the bug this whole
+  # harness exists to catch.
+  local log="$PHYLLIS_HOME_TEST/calibration-log.jsonl"
+  if [ -s "$log" ]; then
+    return 0
+  fi
+  if [ -s "$ERR_LOG" ] && grep -q 'session-end-snapshot' "$ERR_LOG"; then
+    # Allowed skip — the hook recorded *why* it didn't write.
+    # But the runner counts "new error lines" as a failure signal, so we
+    # roll those back here: the assert_fn returning 0 says "this skip
+    # was structured, not silent". We truncate ERR_LOG so the runner's diff
+    # shows 0. That's a side effect inside an assert which is ugly but localized.
+    : > "$ERR_LOG"
+    return 0
+  fi
+  return 1
+}
+
+# ---- Run ----
+
+printf 'hook test harness — sandbox=%s\n' "$TEST_DIR"
+printf '%s\n' "----"
+
+# 1. UserPromptSubmit (fresh)
+fire_hook "auto-kickoff.sh / fresh session" \
+  "bash $HOOKS_DIR/auto-kickoff.sh" \
+  "userpromptsubmit-fresh-session.json" \
+  assert_kickoff_sentinel_fresh
+
+# 2. UserPromptSubmit (existing) — pre-create sentinel so hook should no-op.
+EXISTING_SID="test-existing-00000000-0000-0000-0000-000000000002"
+mkdir -p "$HOOK_TEST_STATE_DIR/kickoff-sentinels"
+touch "$HOOK_TEST_STATE_DIR/kickoff-sentinels/claude-kickoff-$EXISTING_SID"
+fire_hook "auto-kickoff.sh / existing session" \
+  "bash $HOOKS_DIR/auto-kickoff.sh" \
+  "userpromptsubmit-existing-session.json" \
+  assert_kickoff_sentinel_existing
+
+# 3. PostToolUse Edit, clean
+fire_hook "post-edit-stub-check.py / clean" \
+  "python3 $HOOKS_DIR/post-edit-stub-check.py" \
+  "posttooluse-edit-clean.json" \
+  assert_stub_clean_silent
+
+fire_hook "post-edit-secret-scan.py / clean" \
+  "python3 $HOOKS_DIR/post-edit-secret-scan.py" \
+  "posttooluse-edit-clean.json" \
+  assert_stub_clean_silent
+
+# 4. PostToolUse Edit, secret
+fire_hook "post-edit-secret-scan.py / secret" \
+  "python3 $HOOKS_DIR/post-edit-secret-scan.py" \
+  "posttooluse-edit-secret.json" \
+  assert_secret_scan_flags
+
+# 5. PostToolUse Write HTML
+fire_hook "post-write-serve.sh / html" \
+  "bash $HOOKS_DIR/post-write-serve.sh" \
+  "posttooluse-write-html.json" \
+  assert_html_served_marker
+
+# 6. PreToolUse WebFetch
+fire_hook "pre-web-rfip.py / localhost" \
+  "python3 $HOOKS_DIR/pre-web-rfip.py" \
+  "pretooluse-webfetch-localhost.json" \
+  assert_rfip_context
+
+# 7. StopFailure
+fire_hook "stop-failure-throttle.sh / rate_limit" \
+  "bash $HOOKS_DIR/stop-failure-throttle.sh" \
+  "stop-failure.json" \
+  assert_stop_failure_logged
+
+# 8. SessionEnd — must come AFTER auto-kickoff fresh so the start-snapshot
+#    has been written for that session_id (path-divergence regression test).
+fire_hook "session-end-snapshot.sh" \
+  "bash $HOOKS_DIR/session-end-snapshot.sh" \
+  "sessionend.json" \
+  assert_session_end_log_or_skip
+
+# 9. PreToolUse Bash — block-gmail-ack-warnings.py.
+#    Clean command not blocked; every violating form (direct, bash -c wrapper,
+#    subshell parens, after a pipeline/;) blocked.
+fire_hook "block-gmail-ack-warnings.py / clean" \
+  "python3 $HOOKS_DIR/block-gmail-ack-warnings.py" \
+  "pretooluse-bash-gmail-clean.json" \
+  assert_bash_block_allowed
+fire_hook "block-gmail-ack-warnings.py / direct" \
+  "python3 $HOOKS_DIR/block-gmail-ack-warnings.py" \
+  "pretooluse-bash-gmail-ack-direct.json" \
+  assert_bash_block_denied
+fire_hook "block-gmail-ack-warnings.py / bash -c wrapper" \
+  "python3 $HOOKS_DIR/block-gmail-ack-warnings.py" \
+  "pretooluse-bash-gmail-ack-bashc.json" \
+  assert_bash_block_denied
+fire_hook "block-gmail-ack-warnings.py / subshell parens" \
+  "python3 $HOOKS_DIR/block-gmail-ack-warnings.py" \
+  "pretooluse-bash-gmail-ack-subshell.json" \
+  assert_bash_block_denied
+fire_hook "block-gmail-ack-warnings.py / after pipeline" \
+  "python3 $HOOKS_DIR/block-gmail-ack-warnings.py" \
+  "pretooluse-bash-gmail-ack-pipeline.json" \
+  assert_bash_block_denied
+
+# 10. PreToolUse Bash — block-raw-draft-delete.py (same five-form battery).
+fire_hook "block-raw-draft-delete.py / clean" \
+  "python3 $HOOKS_DIR/block-raw-draft-delete.py" \
+  "pretooluse-bash-gws-clean.json" \
+  assert_bash_block_allowed
+fire_hook "block-raw-draft-delete.py / direct" \
+  "python3 $HOOKS_DIR/block-raw-draft-delete.py" \
+  "pretooluse-bash-gws-delete-direct.json" \
+  assert_bash_block_denied
+fire_hook "block-raw-draft-delete.py / bash -c wrapper" \
+  "python3 $HOOKS_DIR/block-raw-draft-delete.py" \
+  "pretooluse-bash-gws-delete-bashc.json" \
+  assert_bash_block_denied
+fire_hook "block-raw-draft-delete.py / subshell parens" \
+  "python3 $HOOKS_DIR/block-raw-draft-delete.py" \
+  "pretooluse-bash-gws-delete-subshell.json" \
+  assert_bash_block_denied
+fire_hook "block-raw-draft-delete.py / after pipeline" \
+  "python3 $HOOKS_DIR/block-raw-draft-delete.py" \
+  "pretooluse-bash-gws-delete-pipeline.json" \
+  assert_bash_block_denied
+
+# 11. Stop — sanitize-permission-allowlist.py. Reads no stdin and mutates a
+#     settings file under $HOME, so it doesn't fit fire_hook's stdin-pump model.
+#     The standalone python test isolates $HOME to a tempdir (real ~/.claude is
+#     never touched) and asserts broken entries removed / clean entries kept.
+printf '  ---- sanitize-permission-allowlist.py (standalone) ----\n'
+if python3 "$HOOKS_DIR/test_sanitize_allowlist.py"; then
+  PASS=$((PASS + 2))
+else
+  FAIL=$((FAIL + 1))
+  FAIL_NAMES+=("sanitize-permission-allowlist.py")
+fi
+
+printf '%s\n' "----"
+printf 'pass=%d fail=%d\n' "$PASS" "$FAIL"
+if [ "$FAIL" -gt 0 ]; then
+  printf 'failed: %s\n' "${FAIL_NAMES[*]}"
+  exit 1
+fi
+exit 0

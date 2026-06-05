@@ -1,0 +1,44 @@
+# PropterMaltwo is a config-distribution repo: it ships machinery, never state.
+# These patterns are belt-and-suspenders against accidentally committing the
+# kind of runtime/personal data that install.sh deliberately leaves out.
+
+# Runtime/personal state (regrows per machine — never ship)
+projects/
+memory/
+sessions/
+session-env/
+cache/
+telemetry/
+file-history/
+shell-snapshots/
+history.jsonl
+*.credentials.json
+.credentials.json
+
+# Logs + snapshots
+*.log
+*.jsonl
+!CHANGELOG.md
+
+# Local override + backups
+settings.local.json
+*.bak
+*.bak.*
+*.bak-*
+
+# Angel runtime
+.angel/runs/
+skills/angel/usage.log
+skills/angel/outcomes.log
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+
+# Node (if a stranger runs tooling here)
+node_modules/
+
+# Python build artifacts
+__pycache__/
+*.pyc
