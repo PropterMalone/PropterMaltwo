@@ -5,7 +5,6 @@ modes: [diff, full]
 experimental: false
 requires:
   any_of: [any]
-prefers: []
 context:
   digest: yes
   project_claude_md: yes
@@ -70,7 +69,7 @@ Use WebFetch (or the equivalent tool available) when external documentation need
 
 ## Examples
 
-**Flag this (Lane A, external)** — `server/azure_job_client.py:225-233` constructs a POST body with `containers[0]` containing `image`, `name`, and `env` but no `resources` field. Per the Azure Container Apps REST API reference (`https://learn.microsoft.com/en-us/rest/api/containerapps/jobs/start`), a container override without `resources` causes the runtime to use default resources (0.5 CPU / 1 Gi), silently overriding the job template's spec. Fix: echo `resources` from `_fetch_job_container_spec` the same way the code already echoes `image` and `env`. Severity: **Critical** if the job's documented resource needs exceed 0.5 CPU / 1 Gi; **Important** otherwise.
+**Flag this (Lane A, external)** — `services/job_client.py:225-233` constructs a POST body with `containers[0]` containing `image`, `name`, and `env` but no `resources` field. Per the Azure Container Apps REST API reference (`https://learn.microsoft.com/en-us/rest/api/containerapps/jobs/start`), a container override without `resources` causes the runtime to use default resources (0.5 CPU / 1 Gi), silently overriding the job template's spec. Fix: echo `resources` from `_fetch_job_spec` the same way the code already echoes `image` and `env`. Severity: **Critical** if the job's documented resource needs exceed 0.5 CPU / 1 Gi; **Important** otherwise.
 
 **Flag this (Lane A, internal)** — `docs/decisions/02-per-student-isolation.md:14` asserts "no cross-student queries; the foreign-key boundary is enforced at the application layer, not by the DB." `src/twilio/inbound-handler.ts:1209-1278` performs a query that joins across the student boundary. Fix: either update the ADR to relax the invariant (with rationale) or restructure the handler to scope the query per-student. Severity: **Important** — the ADR is load-bearing per its own preamble.
 

@@ -30,13 +30,14 @@ fi
 
 if ! line="$(jq -er --arg rundir "$RUN_DIR" --arg today "$TODAY" --arg cal "$CAL_TAG" '
   def s(x): (x // 0);
+  def clean(x): (x | tostring | gsub("[|\n]"; " "));   # | is the field delimiter; strip it from every free-text field
   ( if (.started_at // "") == "" then $today else (.started_at | split("T")[0]) end ) as $date
-  | [ .totals.personas[]?.name ] as $pn
+  | [ .totals.personas[]?.name | clean(.) ] as $pn
   | [ $date,
-      (.project // "UNKNOWN"),
-      (.mode // "?"),
+      clean(.project // "UNKNOWN"),
+      clean(.mode // "?"),
       "\($pn|length) (\($pn|join(",")))",
-      ((.verdict // "?") | gsub("[|\n]"; " ")),
+      clean(.verdict // "?"),
       "\(s(.findings.critical))C/\(s(.findings.important))I/\(s(.findings.minor))M/\(s(.findings.noted))N",
       ( (if .totals.total_tokens == null then "total:null" else "total:\(.totals.total_tokens)" end)
         + " wall:\(s(.totals.wall_seconds))s reader:\(if .reader_enabled then "on" else "off" end)"

@@ -5,7 +5,6 @@ modes: [diff, full]
 experimental: false
 requires:
   any_of: [package_json, deps_lockfile, ci_config]
-prefers: []
 context:
   digest: yes
   project_claude_md: yes

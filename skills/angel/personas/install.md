@@ -5,7 +5,6 @@ modes: [diff, full]
 experimental: false
 requires:
   any_of: [install_docs_changed, dockerfile, ci_config]
-prefers: []
 context:
   digest: no
   project_claude_md: no

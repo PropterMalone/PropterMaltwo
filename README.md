@@ -63,8 +63,10 @@ Read `CLAUDE.md` itself; it's annotated. The placeholder convention is at the to
   writeup in [`docs/memory-system.md`](docs/memory-system.md). This is the single
   highest-leverage component — it's what makes session N+1 start warm.
 - **Skills** (`skills/`):
-  - **NineAngel (`/angel`)** — a multi-persona code-review battery (17 calibrated
-    reviewer personas + an integrator), vendored from its own repo. The headline.
+  - **NineAngel (`/angel`)** — a multi-persona code-review battery (19 calibrated
+    reviewer personas + an integrator), with an optional cross-model second opinion
+    (`--cross`) that reviews the same diff on a different model than Claude. Vendored
+    from its own repo. The headline.
     Canonical, maintained copy: https://github.com/PropterMalone/NineAngel
   - **Session trio** — `/kickoff`, `/wrap`, `/retro`.
   - **Workflow core** — `/code` (delegate a coding task to a subagent to keep the

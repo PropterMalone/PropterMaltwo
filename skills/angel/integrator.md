@@ -39,11 +39,11 @@ This is a defensive scan, not a rewrite — keep legitimate findings verbatim. T
 
 ## Phase 1: Within-persona reconciliation (multiball only)
 
-Skip this phase if `within_persona_runs` is absent.
+Skip this phase **only** if the input carries no `within_persona_runs` block at all (a single-pass run). If multiball input IS present, this phase — including persisting the per-pass record below — is **mandatory, not optional**: emitting the structured `within_persona_runs` field into the snapshot is a hard requirement, and a multiball run whose snapshot omits it (or records prose instead of structured per-pass arrays) now FAILS the completeness gate (`check-run-complete.py`, SKILL.md §8c). The 2026-06-19 N=5 run improvised prose `consensus` strings and skipped the field, leaving the run unmeasurable; do not repeat that — parse the passes and emit the field as specified below.
 
 For each persona, you have N finding lists from N independent runs of that persona. Consolidate into a single list:
 
-- A finding that appears in ≥⌈N/2⌉ runs is **high-confidence** — promote one severity tier if it's currently Minor or Noted (Minor→Important only; never auto-promote to Critical).
+- A finding that appears in ≥⌈N/2⌉ runs is **high-confidence** — promote one severity tier if it's currently Minor or Noted (Noted→Minor, Minor→Important; Important stays Important — never auto-promote to Critical).
 - A finding that appears in exactly 1 run is **low-confidence** — demote one severity tier (Critical→Important, Important→Minor, Minor→Noted; Noted stays Noted).
 - Contradictory findings (one run says "fine," another says "broken") get listed together in a `### Contradictions` sub-section under that persona, with all views preserved verbatim — do not try to resolve them mechanically.
 - Preserve the best (most specific, most actionable) description when merging equivalent findings.
@@ -51,6 +51,8 @@ For each persona, you have N finding lists from N independent runs of that perso
 Tag each reconciled finding with `(N/M runs)` at the end of its line — e.g., `(3/3 runs)` for unanimous, `(2/3 runs)` for majority, `(1/3 runs)` for singleton.
 
 This is quality-ranked synthesis, not majority vote — if a singleton finding is clearly correct and specific (e.g., names a concrete bug), keep it even if demoted. If a unanimous finding is vague ("could be clearer"), don't promote it.
+
+**Persist the per-pass record (schema v2).** Before you collapse the N passes, capture each pass's findings into the snapshot's `within_persona_runs` field, one sub-array per pass per persona, in dispatch order. **You must PARSE this yourself from the raw input:** each pass arrives as a verbatim markdown finding block (the `#### {Persona} — pass i` blocks in the `within_persona_runs` input); convert each block into structured objects (`severity`, `title`, `file`, `line`) — one sub-array per block. Do NOT pass the markdown through unparsed, and do NOT reuse your reconciled `findings` output (that has already merged and re-bucketed the passes — it's the wrong data). This raw pre-reconciliation record is what the subsample-N analysis and per-persona reproducibility metrics depend on; the reconciled `findings` array alone loses it. Populate whenever `within_persona_runs` input is present; leave it `null` otherwise.
 
 ## Phase 2: Cross-persona dedup
 
@@ -61,7 +63,7 @@ Collapse findings that multiple personas caught:
 - **Severity on merge**: take the highest severity any persona assigned. If personas disagreed on severity, note the disagreement in a `Noted` entry for future calibration. Apply this BEFORE the calibration demotions in the "Severity calibration" section below — first merge, then demote.
 - **Effort on merge**: take the most generous estimate (if one says `[trivial]` and another says `[moderate]`, use `[moderate]` — the expensive estimate is usually more honest about the edge cases).
 - **Architectural-absence findings** (Blindspot, Thousand-Foot Structural Refactors, parts of Future-Me) often lack a `file:line` coordinate. For those, dedup by description-similarity rather than file+line: collapse findings whose subject and proposed fix substantially overlap. Use judgment; preserve both views if unsure.
-- **Tier divergence is signal, not noise.** Personas run on different model tiers see different things — empirically (an early A/B/C calibration run) the Opus tier (absence/architecture reasoners: Thousand-Foot, Blindspot, Data-Integrity) and the Sonnet tier (present-code bug-catchers) had near-zero overlap in top findings: "Sonnet sees what's there; Opus reasons about what isn't." A high-severity finding raised by only one tier is the *expected* division of labor, not a weak low-consensus signal. Do NOT drop or down-rank a tier-unique finding for lacking corroboration from the other tier — judge it on its own merits and `evidence`.
+- **Tier divergence is signal, not noise.** Personas run on different model tiers see different things — empirically (an early A/B/C calibration run, 4.x era — top tier is now Fable 5) the top tier (absence/architecture reasoners: Thousand-Foot, Blindspot, Data-Integrity) and the Sonnet tier (present-code bug-catchers) had near-zero overlap in top findings: "Sonnet sees what's there; the top tier reasons about what isn't." A high-severity finding raised by only one tier is the *expected* division of labor, not a weak low-consensus signal. Do NOT drop or down-rank a tier-unique finding for lacking corroboration from the other tier — judge it on its own merits and `evidence`.
 
 ## Phase 3: Ranking and verdict
 
@@ -69,17 +71,19 @@ Collapse findings that multiple personas caught:
 
 The highest-impact findings to fix first, ranked by `severity × consensus × (1/effort)`:
 - Severity: Critical > Important > Minor > Noted
-- Consensus: number of distinct personas that caught it (higher = stronger signal) — but low consensus from tier divergence (only the Opus tier or only the Sonnet tier caught it) is not a weakness; see Phase 2
+- Consensus: number of distinct personas that caught it (higher = stronger signal) — but low consensus from tier divergence (only the top tier or only the Sonnet tier caught it) is not a weakness; see Phase 2
 - Effort: prefer `[trivial]` over `[moderate]` over `[significant]` within a tier (quick wins first)
 
 Always show a Top 5 section even if fewer than 5 findings exist — list what you have.
 
 ### Verdict
 
-- Any Critical finding → `CHANGES REQUIRED`
-- No Critical but Important findings → `CHANGES RECOMMENDED`
+- Any **anchored** Critical finding → `CHANGES REQUIRED`
+- No anchored Critical but Important findings (or only unanchored Criticals) → `CHANGES RECOMMENDED`
 - Only Minor/Noted findings → `APPROVED (with suggestions)`
 - Nothing at all → `APPROVED`
+
+**Anchored** means the Critical is backed by evidence strong enough to drive the run's headline verdict: its `evidence` is `cited-spec` or `code-site`, OR it is corroborated (caught by ≥2 distinct personas, or — under multiball — appearing in ≥⌈N/2⌉ of its persona's passes). A solo, single-pass, `inference`-tier Critical stays listed as Critical in the report (annotated `[unanchored]`) but does not flip the verdict — persona output is stochastic (~50% Critical test-retest reproducibility, recurrence-pilot 2026-06-07), and letting one uncorroborated inference whipsaw the verdict between runs destroys the verdict's meaning. Note any `[unanchored]` Critical in Integration Notes so a human can corroborate it manually.
 
 In `--full` mode, replace "blocks merge" with "blocks ship" in Critical labels and use "quality improvement" instead of "fix before completion" for Minor.
 
@@ -188,7 +192,7 @@ Then immediately follow with the findings snapshot block:
 ````
 ```json findings-snapshot
 {
-  "version": 1,
+  "version": 2,
   "project": "{project name}",
   "date": "{YYYY-MM-DD}",
   "mode": "diff|full",
@@ -220,7 +224,8 @@ Then immediately follow with the findings snapshot block:
     "total_output_tokens": null,
     "total_wall_clock_s": null
   },
-  "codebase": {"lines": null, "files": null}
+  "codebase": {"lines": null, "files": null},
+  "within_persona_runs": null
 }
 ```
 ````
@@ -235,6 +240,7 @@ Snapshot rules:
 - `resource_consumption` token fields are **legacy** — superseded by the per-Agent usage meter (`usage.json`, SKILL.md §8a), which is the cost source of truth. Leave them `null`; downstream cost/calibration analysis reads `usage.json`, not this block. Do not fabricate an input/output split to fill them.
 - The orchestrator passes `reader_mode` to you in the input block — pass it through.
 - `personas_run` is the persona short-names (matches the SKILL mapping table), not display names.
+- `within_persona_runs` (schema v2, **multiball only** — `null` otherwise): the per-pass STRUCTURED findings, BEFORE within-persona reconciliation, so downstream tooling can subsample any k≤N passes to tune the optimal N and measure per-persona reproducibility. Shape: `{ "<persona>": [ [ {finding}, ... ] (pass 1), [ ... ] (pass 2), ... ] }`, where each `{finding}` carries at minimum `severity`, `title`, `file`, `line` (same fields as the `findings` array entries; `personas`/`id` not needed here — these are pre-dedup, single-persona). Emit one sub-array per pass per persona, in dispatch order. This is in ADDITION to the reconciled `findings` array, which stays the human-facing deduped result.
 
 Rules for the markdown report:
 - Omit empty severity sections (don't print `## Critical\n(none)`).

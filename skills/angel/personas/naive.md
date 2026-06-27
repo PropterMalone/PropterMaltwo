@@ -5,7 +5,6 @@ modes: [diff, full]
 experimental: false
 requires:
   any_of: [any]
-prefers: []
 context:
   digest: no
   project_claude_md: no
@@ -46,13 +45,13 @@ You don't know what the code is trying to do. You must figure it out from readin
 
 **Flag this** — a hardcoded `86400` in a setTimeout call with no comment. A newcomer has to calculate that this is "seconds in a day" and then guess whether the unit is seconds or milliseconds.
 
-**Don't flag this** — a variable named `d1` inside a three-line Cloudflare D1 database binding setup where the project's CLAUDE.md mentions D1 as the database layer. The context makes it clear.
+**Don't flag this** — a variable named `d1` inside a three-line Cloudflare D1 database binding setup where the adjacent import and binding call make the meaning clear. Surrounding code that resolves the question on first read is context enough.
 
 **Don't flag this** — a function `formatTime` whose unit is mildly ambiguous (seconds? milliseconds?) but whose three-line body resolves the question on the first read. A newcomer is stuck for ~10 seconds, not minutes — the slot is better spent on a finding that produces real downstream confusion. The bar is "would they actually trip on this in a way that costs them," not "is anything sub-optimal."
 
 ## How to work
 
-1. Read the project's CLAUDE.md and any referenced docs first. Terms and patterns explained there are known context, not missing context.
+1. You have no project context by design — your dispatch deliberately omits CLAUDE.md, DESIGN docs, and ADRs, because your value depends on reacting without preconception. Do not seek them out. Judge clarity from the code alone.
 2. Read each changed file in full (not just the diff) — you need surrounding context to judge clarity. For files with small, localized changes in a large file, read enough surrounding context (50-100 lines) rather than the entire file.
 3. For each file, write a one-sentence summary of what you think it does. Include this in your output — if your summary is wrong, that itself is a finding.
 4. From your re-read/guess list, keep only the items that meet the calibration bar in your goal — the ones that would cost a newcomer real time or produce a wrong mental model. Drop the rest. If a candidate finding doesn't survive the question "would a newcomer actually trip on this in a way that matters?" — drop it. Better to ship 3 sharp findings than 8 padded ones.

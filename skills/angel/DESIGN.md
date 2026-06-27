@@ -10,6 +10,14 @@ The hypothesis: review quality improves more from independent perspectives than 
 
 Each persona's frontmatter (`personas/<short>.md`) is the source of truth for its `default` (yes/opt-in), `modes` (diff/full), `experimental` flag, and `requires.any_of` signal triggers. The orchestrator reads these at preflight and selects the battery via project signals (see §Battery selection).
 
+### Persona frontmatter contract
+
+Every `personas/<short>.md` opens with a YAML frontmatter block. The contract — enforced by `scripts/validate-personas.py`, which exits nonzero on violation:
+
+- **Required keys**: `name` (the short name), `default` (`yes` | `opt-in`), `modes` (`[diff]` / `[full]` / `[diff, full]`), `experimental` (`true` excludes from auto-inclusion until graduation), `requires.any_of` (trigger signals; `[any]` = always).
+- **Required `context:` block** — all four keys: `digest`, `project_claude_md`, `full_bundle`, `lane`. Only `project_claude_md` is consumed on the inline (reader-off) path today — `no` omits `<project_context>` from the dispatch prompt (Naive, User, Install). The other three are reader-era keys, retained for `--reader` runs and a future slicer re-implementation (ADR-01's reopen condition).
+- **No other keys.** In particular `prefers:` was dead schema nothing read (removed 2026-06-12) — the pii→deanon sequential pairing its values appeared to encode is prose-enforced in SKILL.md §1/§4, not frontmatter-driven.
+
 ### Default-yes personas
 
 Run automatically when their required signals are detected (or unconditionally for `requires: [any]`).
@@ -20,7 +28,7 @@ Run automatically when their required signals are detected (or unconditionally f
 
 3. **Hypercritical** (`requires: [any]`) — Hates your guts. Steelmans every argument against the code. Finds: over-engineering, cargo-culted patterns, lazy abstractions, inconsistent conventions, tests that don't test anything, sloppy error handling.
 
-4. **Thousand-Foot** (`requires: [any]`) — Zooms out. *Did you build the right thing?* Finds: wrong abstraction level, solving the wrong problem, scope creep, architectural misfit, simpler approaches missed. In `--full` mode, also prescribes structural refactors.
+4. **Blindspot** (`requires: [any]`, `modes: [full]` — full-project only; default since the 2026-06-06 swap, ADR 02) — Looks at what *isn't there*. Finds capabilities, safeguards, states, or concerns implied by the existing code or the project's domain that the codebase does not address at all. Examples: subscribe without unsubscribe, deploy without rollback, documented rate limits with no rate-limit handling. Wishlist guard: every finding must name a triggering scenario already in the code or implied by the stated domain.
 
 5. **Future-Me** (`requires: [any]`) — *Will I understand this in 6 months?* Finds: clever code that's only clever today, missing "why" comments on non-obvious decisions, implicit coupling that requires tribal knowledge.
 
@@ -44,7 +52,7 @@ Run only when explicitly named.
 
 13. **Install** (`requires: install_docs_changed | dockerfile | ci_config`) — Soup-to-nuts install-flow tester from a naive (non-developer) user's perspective. Follows docs literally, can't infer missing steps. **Threat-model concern**: Install runs commands from the project under review (install scripts, build commands). Opt-in by design — not safe to fire automatically against an untrusted repo.
 
-14. **Blindspot** (`modes: [full]`, **experimental**) — Looks at what *isn't there*. Finds capabilities, safeguards, states, or concerns implied by the existing code or the project's domain that the codebase does not address at all. Examples: subscribe without unsubscribe, deploy without rollback, integrations with documented rate limits but no rate-limit handling, regulated-domain projects with no audit log. Distinct from Thousand-Foot (restructures what exists) and Data-Integrity (traces absent writes within existing flows) — Blindspot finds *missing flows entirely*. Full-project only. Wishlist guard: every finding must name a triggering scenario already in the code or implied by the stated domain.
+14. **Thousand-Foot** (`requires: [any]`; opt-in since the 2026-06-06 swap, ADR 02) — Zooms out. *Did you build the right thing?* Finds: wrong abstraction level, solving the wrong problem, scope creep, architectural misfit, simpler approaches missed. In `--full` mode, also prescribes structural refactors. Distinct from Blindspot (Thousand restructures what exists; Blindspot finds missing flows entirely). Demoted for worst cost/value in the miner; re-tune direction if retained: strategic direction, not absence.
 
 15. **Pennypincher** (**experimental**) — Scrutinizes cost in all senses (lines, bytes, MB, dollars, cognitive load, maintenance burden). Finds: dead code, single-use abstractions, defensive guards in trusted paths, "just in case" features, half-implemented codepaths, oversized deps for tiny use, dev deps in production images, unbounded caches/logs/tables, paid infra at idle, cognitive bloat that doesn't earn its weight. Distinct from Performance (speed on hot paths), Hypercritical (clever-now), Future-Me (abstraction shape), and Naive (single-hunk clarity). **Rent test:** every finding must name a concrete cost AND the missing rent — what value the cost was supposed to provide that it isn't.
 
@@ -70,6 +78,12 @@ Format (markdown table): `Field / pattern | Kind | Why identifying here | Source
 
 The adjudication tool is `scripts/mine-runs.py`: a persona earns its slot by **solo Important+ catches with low false-positive rate** (`fp%`), not by raw finding volume — a persona can be solo simply because it is credulous. Suspected-redundant pairs surface as high mutual overlap in the same severity band; the miner's first runs already showed Blindspot and Thousand-Foot co-catching architectural criticals on small-app, making them the leading consolidation candidates. **Do not cut on thin data** — wait for ~a dozen runs through the canonical layout (findings-snapshot + dispositions) before acting, then cut/merge the personas the precision data condemns. The ablation experiment (run a project with the top-N personas, compare to full battery) is the formal version; backlog tracks it.
 
+**Reproducibility caveat (recurrence-pilot.py, 2026-06-07).** 9A persona output is highly stochastic: on replicate pairs (identical code+config — two reader passes seconds apart) only **~40% of Important+ findings recur**, severity-graded (noted 23%, minor 37%, important 41%, critical 50%). Two consequences. (1) The miner's single-run solo-Important+ counts are ~40%-recall *samples*, not the population — never cut/keep a persona on one run's solo-volume; multiball or accumulate enough runs that the sample stabilizes (this raises the bar on the Blindspot↔Thousand "~12 full-runs" trigger above). (2) For the cross-run recurrence outcome-proxy, **persistence** (a finding re-appearing on a later commit) is the robust signal — *disappearance* carries a ~62% non-resampling noise floor, so it reads as a fix only above that floor: `corrected ≈ (d−0.62)/(1−0.62)`. This is also the empirical case for **multiballing more**: one pass captures ~40% of a persona's Important+ output, so N× materially raises recall (cost model + caveats in the multiball experiment note below).
+
+**Active experiment (2026-06-06): Blindspot↔Thousand-Foot swap.** Blindspot promoted to `default: yes` / `experimental: false`; Thousand-Foot demoted to `default: opt-in`. Rationale: both are Opus absence/architecture reasoners (DESIGN's named consolidation candidates), and Thousand earns the worst cost/value in the miner — most expensive persona (~5.3M tokens), lowest unique yield (24 solo Important+), and its Criticals are nearly all co-attributed (rarely solo). Rather than stack the two overlapping lanes, swap them so Blindspot accrues the ~dozen full-run data points it lacks (was named-only, n=2) while Thousand sits out. **Blindspot is full-mode only**, so full runs swap one absence-reasoner for the other — but diff runs are NOT unchanged: Thousand-Foot was the only diff-default top-tier absence/architecture reasoner, so its demotion left the plain-diff battery with zero of that lane (the finding class the tier-by-lane evidence says Sonnet does not catch). The 2026-06-12 full meta-run surfaced this (finding f3): the gap was unintended at swap time and is now **consciously accepted until the review trigger below** (the maintainer, 2026-06-12) — a diff run that wants the lane back opts in with `/angel thousand` alongside the battery. **Review trigger:** once Blindspot has ≥~12 full-run findings-snapshots, run `mine-runs.py` and decide (a) Blindspot keep-as-default vs revert, and (b) Thousand scrap vs re-tune. Re-tune direction if Thousand shows residual unique value: push its lane *up* from "what's absent" (Blindspot's turf) to strategic direction — "is the overall approach right" (e.g., should-be-a-queue-not-a-cron, whole-module duplication) — so it complements rather than duplicates Blindspot. Backlog item: "Blindspot↔Thousand swap — adjudicate."
+
+**Rebooted experiment (2026-06-07 aborted → 2026-06-17 re-armed): multiball-universal at N=5.** Multiball was first flipped default-ON at N=5 for interactive `/angel` on 2026-06-07, then **aborted 2026-06-09, two days in** (zero adjudicable data — the §4 run-record regression dropped snapshots/findings; the subsample-N analyzer was unbuilt; the model family changed mid-window to `claude-fable-5`, making old-family data calibration for a superseded config). **Re-armed 2026-06-17 at N=5** once all four ADR-03 reboot conditions held: (1) `scripts/subsample-analyzer.py` built + tested, (2) new-family dispatch verified (2026-06-12), (3) the family reverted to 4.x-Opus (Fable disabled platform-wide 2026-06-14), so the original ~40% recurrence pilot is back on-calibration and N need not be re-derived, (4) run-record completeness mechanized (init/finalize + `check-run-complete.py`). The operative driver for the off-then-on swing was **budget**, not the data/family reasons alone — re-enabling is a budget judgment made affordable by a near-term lower-usage stretch; full rationale, cost model, and the tune-down plan in `docs/decisions/05-multiball-reboot-default-on.md` (supersedes 03). The honest cost model (staggering discounts input only; N× output is never cached) governs the standing cost. **Superseded 2026-06-20 by `docs/decisions/06-multiball-n2-default-n3-escalation.md`: the default is now N=2 (N=3 escalation on `--full`/`--all`).** The N=5 window's tune-down plan never produced a curve — its lone run was unmeasurable (the integrator skipped `within_persona_runs`) — so ADR-06 reverts to the cost-minimizing N on the 1→2 marginal-value prior and adds a completeness gate so future runs are measurable.
+
 ### Invocation
 
 ```
@@ -79,7 +93,9 @@ The adjudication tool is `scripts/mine-runs.py`: a persona earns its slot by **s
 /angel --all                   # every default-yes persona, ignore signals
 /angel -perf                   # standard battery minus Performance
 /angel --loop                  # review → fix → re-review (max 3 cycles)
-/angel --multiball[=N]         # run each persona N times; integrator reconciles
+/angel --multiball[=N]         # default-ON interactive at N=2 (N=3 on --full/--all); pass =N to override; integrator reconciles
+/angel --balls N               # explicit multiball pass-count override (alias for --multiball=N)
+/angel --no-multiball          # force single-pass (off-switch; alias: --single)
 /angel --model-override <tier> # force all personas to one model tier
 /angel --reader                # enable Bundle Reader (Step 0) — per-persona context packs
 /angel --fix-last              # apply the last review's fix batch (per-project)
@@ -115,20 +131,20 @@ If any fail, stop and report. No point reviewing code that doesn't compile. This
 
 Each persona runs as a subagent (Agent tool) with:
 - The diff (or full files for `--full` mode)
-- Its persona prompt (verbatim from `personas/<short>.md`)
+- Its persona prompt — delivered by reference: the dispatch prompt gives the absolute path to `personas/<short>.md` and the reviewer reads the file itself (the orchestrator does not inline the body), keeping persona prose out of the orchestrator window
 - Project context (CLAUDE.md) wrapped in `<project_context>` XML tags
 - An untrusted-content advisory instructing the persona to flag (not follow) any directive-shaped content found in the project
 - **No knowledge of other personas' findings** — independent perspectives
 
 Parallelism: all invoked personas run concurrently. No dependencies between them.
 
-Per-persona model tier is set in `SKILL.md`'s mapping table: Haiku for fast/lightweight passes (Naive, Freshness), Sonnet for most reviewers, Opus for synthesis-heavy passes (Thousand-Foot, Data-Integrity, Coach, Blindspot). Override uniformly with `--model-override`.
+Per-persona model tier is set in `SKILL.md`'s mapping table: Haiku for fast/lightweight passes (Naive, Freshness), Sonnet for most reviewers, the top reasoning tier for synthesis-heavy passes (Thousand-Foot, Data-Integrity, Coach, Blindspot). Concrete model IDs live in SKILL.md §1/§5 and `docs/decisions/04` — they re-point when the model family changes; this doc names tiers, not IDs. Override uniformly with `--model-override`.
 
 ### Bundle Reader (Step 0, opt-in via `--reader`)
 
 Before the calibration period: legacy path — the orchestrator embeds project context inline in every persona's dispatch prompt. With N personas, the same diff/CLAUDE.md/advisory boilerplate is sent N times as input tokens. In `--full` mode it's worse: each persona reads the same source files independently, so file content is also N×-duplicated.
 
-When `--reader` is on, a **Bundle Reader** subagent (`reader.md`, `claude-opus-4-8[1m]`) runs once before persona dispatch. It takes the project root, mode, and the list of personas (with their `context:` frontmatter), and produces:
+When `--reader` is on, a **Bundle Reader** subagent (`reader.md`, dispatched on the top reasoning tier with the [1m] window — SKILL.md §3.5 names the current model) runs once before persona dispatch. It takes the project root, mode, and the list of personas (with their `context:` frontmatter), and produces:
 
 1. A **universal digest** (`{run_dir}/digest.md`, 2–5k tokens) — file map, manifest summary, README first 100 lines, ADR index, test layout, hot-path map. Shared orientation for personas that opt in.
 2. **Per-persona context packs** (`{run_dir}/bundle-{name}.md`) — each persona reads only its lane's slice. The reader interprets each persona's `lane:` description (judgment-based, like the §1.5 signal vocabulary) to pick which files to include.
@@ -140,15 +156,11 @@ Each persona's `context:` frontmatter block:
 - `full_bundle: no|yes` — bypass extraction entirely (Blindspot only — its mandate requires whole-project context).
 - `lane: |` — judgment-based hint to the reader for which files/code to include.
 
-Personas that benefit from naivete (Naive, User, Install) set `digest: no` and `project_claude_md: no` so they get only their raw slice — no framing primes their perspective. This is a feature the legacy path can't deliver: today, every persona inherits CLAUDE.md in its dispatch prompt, undermining Naive specifically. The Reader architecture lets us strip primes per-persona.
+Personas that benefit from naivete (Naive, User, Install) set `digest: no` and `project_claude_md: no` so they get only their raw slice — no framing primes their perspective. As of 2026-06-09 the inline (reader-off) path honors `project_claude_md: no` too — the orchestrator omits `<project_context>` for those personas at dispatch (SKILL.md §4), so Naive's cold read survives the reader's retirement.
 
 **Failure handling**: if the reader fails (timeout, error, missing manifest), fall back to the legacy inline-embed path and log `reader_fallback: <reason>` in Integration Notes. Personas still run; the run is still useful for review.
 
-**Calibration — live-use, not backtest**: the reader path stays opt-in via `--reader` and is calibrated against real usage rather than synthetic worktree backtests. The **first** `/angel` invocation against each project triggers SKILL.md §1.6 auto-trigger: the full pipeline runs twice (baseline + reader) on the same diff/codebase. Both reports surface to the user; paired findings-snapshots feed the cross-project promotion gate. A marker file `reader-calibration.json` in the per-project memory dir gates re-trigger — each project calibrates exactly once.
-
-The double-run is bypassed when the user signals an informed choice (`--reader` / `--no-reader` explicit), passes `--no-calibrate`, is using `--fix-last`, `--loop`, or `--multiball` modes, or has already calibrated this project. Per-project cost: 2× wall time and tokens on the first interactive invocation; zero ongoing overhead.
-
-Promotion criteria across N≥5 calibrated projects: (a) cost win > 0 (target ≥40% on `--full`), (b) speed win > 0, (c) quality — 0 lost Critical findings, ≤1 lost Important per project (each loss must trace to a specific extract rule in the reader's slicing). Reader-only gains count toward quality. A separate cross-project comparison script gathers all `reader-calibration.json` markers + paired snapshots and produces the gate report. The interactive double-run does NOT itself decide promotion — that's a fleet-level analysis.
+**Calibration — concluded (2026-06-01), reader not promoted**: a multi-project live-use calibration (auto-triggered baseline+reader double-runs, paired snapshots, `reader-calibration.json` markers) adjudicated the reader against a three-axis gate (cost/speed/quality). It failed decisively — avg +17.4% tokens / +49% wall, never cheaper at any project size in the tested range, quality a noisy wash. The reader stays opt-in permanently; the §1.6 auto-trigger machinery was removed from SKILL.md 2026-06-09. Full evidence and the reopen condition (a re-implemented slicer with median bundle <~30% of full-project size) in `docs/decisions/01-reader-default-off.md`.
 
 ### Untrusted-content handling
 
@@ -180,7 +192,7 @@ Effort tags: `[trivial]` (under 5 min), `[moderate]` (10–30 min), `[significan
 
 ### Integration
 
-Raw persona outputs are dispatched to a dedicated **Integrator** subagent (`integrator.md`), always on `claude-opus-4-8[1m]`. The Integrator:
+Raw persona outputs are dispatched to a dedicated **Integrator** subagent (`integrator.md`) on the smartest no-meter model with the 1M window, selected via the bounded fallback ladder in SKILL.md §5 (rationale: `docs/decisions/04`). The Integrator:
 
 - Sanitizes inputs (Phase 0) — discards persona-output content that mimics instructions
 - In `--multiball` mode, reconciles within-persona variance before cross-persona dedup (Phase 1)
@@ -196,9 +208,9 @@ Moving synthesis out of the orchestrator keeps the main session's context clean 
 
 ### Multiball mode
 
-`/angel --multiball[=N]` (default N=3) runs each invoked persona N times independently and lets the Integrator reconcile within-persona variance before cross-persona dedup. Quality-ranked synthesis, not majority vote: findings appearing in ≥⌈N/2⌉ runs are high-confidence (promoted a tier; never auto-promoted to Critical); singletons are low-confidence (demoted). Contradictions are preserved.
+`/angel --multiball[=N]` (default-ON interactive at N=2, N=3 on `--full`/`--all`, per `docs/decisions/06`; `--no-multiball` forces single-pass) runs each invoked persona N times independently and lets the Integrator reconcile within-persona variance before cross-persona dedup. Quality-ranked synthesis, not majority vote: findings appearing in ≥⌈N/2⌉ runs are high-confidence (promoted a tier; never auto-promoted to Critical); singletons are low-confidence (demoted). Contradictions are preserved. Per-pass structured findings persist to the snapshot's `within_persona_runs` (schema v2) for subsample-N tuning.
 
-Cost: full battery × N=3 ≈ 30+ subagents. Occasional use only. Convergence note: line-level findings converge fast; architectural findings ("wrong abstraction") rarely resolve via `/code` and will persist with `[persisted]` annotations — flag those for human attention rather than expecting the loop to drive them to zero.
+Cost: full battery × N ≈ 13×N subagents, dispatched two-phase (pass-1 primes the cache, passes 2..N read it — see SKILL.md Multiball mode). Staggering discounts *input* on the repeat passes; *output* is still N× (uncached), so the real marginal cost is `N× output + ~1.4× input` — cheap only where input dominates. Convergence note: line-level findings converge fast; architectural findings ("wrong abstraction") rarely resolve via `/code` and will persist with `[persisted]` annotations — flag those for human attention rather than expecting the loop to drive them to zero.
 
 ### Review loop
 

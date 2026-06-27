@@ -5,7 +5,6 @@ modes: [diff, full]
 experimental: false
 requires:
   any_of: [schema, sql_files, db_driver_dep]
-prefers: []
 context:
   digest: yes
   project_claude_md: yes

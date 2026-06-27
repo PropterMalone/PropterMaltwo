@@ -5,7 +5,6 @@ modes: [diff, full]
 experimental: false
 requires:
   any_of: [runtime_code, hot_path_indicators]
-prefers: []
 context:
   digest: yes
   project_claude_md: yes

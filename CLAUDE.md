@@ -28,7 +28,7 @@ Thoroughness is the default. Think carefully, consider edge cases, verify assump
 
 - **Parallel tool calls** whenever independent. Never serialize what can run concurrently.
 - **Targeted reads.** After grep finds the lines, use `offset`/`limit` — don't re-read full files. Exception: first read of a file you'll edit.
-- **Delegate liberally.** Subagents are a first resort, not a last one. Use an Explore-style agent for any multi-file search or anything likely to need 2+ grep rounds; direct Grep/Glob only when the symbol or file is already known. A coding-subagent (`/code` here) as the default for self-contained coding work. A review battery (`/angel` here) on shipped code when review matters. Run multiple subagents in parallel when subtasks are independent.
+- **Delegate liberally.** Subagents are a first resort, not a last one. Use an Explore-style agent for any multi-file search or anything likely to need 2+ grep rounds; direct Grep/Glob only when the symbol or file is already known. A coding-subagent (`/code` here) as the default for self-contained coding work. A review battery (`/angel` here) on shipped code when review matters — and for high-stakes diffs, a cross-model second opinion (`/angel --cross`) that re-reviews on a *different* model than the one that wrote the code (Gemini or Codex), the one model-independence axis a same-model battery structurally can't cover. Run multiple subagents in parallel when subtasks are independent.
 - **Model + context window.** Pick a model with a large context window for long iterative sessions, but treat the window as working memory, not a dumping ground for raw tool output. Delegate images, bulk file scans, large test output, and multi-round exploratory reads to subagents regardless of size — summaries survive compaction, raw output doesn't.
   <!-- adapt: the real config pins a specific model id + a 1M-window flag. Set your own
        model here. The principle (big window for iteration, don't fill it with raw output)
@@ -43,6 +43,7 @@ Thoroughness is the default. Think carefully, consider edge cases, verify assump
   - **Pre-commit, not retrospective.** Write the estimate BEFORE starting the task, so it's a forcing function — not a journal entry rationalized after the fact.
   - **Log wins too.** If it quotes 30 min and finishes in 30 min, log it. Without wins in the data, the calibration becomes a record of misses and over-corrects downward.
   - **Categorize by complexity bucket**: *tweak* (single-line/config), *single-file edit*, *new module + tests*, *cross-module refactor*, *architecture change*. Pacing differs by category — a single average misleads.
+  - **Record the model.** Pacing differs by model family/era; compute per-bucket medians *per model*, never across. (The real config added this when its default model changed mid-stream — old data calibrates the old model, not the new one.)
   - **Trigger threshold**: any time the model quotes a duration in chat that affects a ship-vs-defer or scope decision. Skip routine "let me read this file" mentions.
   - **Reviewed at /retro.** The retro skill includes a step to scan the estimates file for the period so the data actually feeds back into future estimates.
 
@@ -111,6 +112,10 @@ User directs what to build; the model owns implementation. Machine legibility fi
      of the repo and out of the model's reach. Rewrite the specifics for your setup. -->
 
 - **Machine**: `<dev-box>` (Linux). Claude Code runs directly here. Docker, git, npm all local.
+- **The permission layer is NOT a security boundary.** If you run with a broad Bash allow-list + auto-accept-edits (common on a trusted solo dev box), the deny/ask lists are speed bumps for common footguns, not a boundary — block-lists leak (`rm -rf ~/Projects/x`, `git clean -fdx`, a bare `git reset --hard` all slip through). Actual safety = model judgment + hooks (secret scan, draft-delete guards). Exercise the same care as if no allow-list existed; never treat "the permission system allowed it" as evidence an action is safe.
+  <!-- WHY: stated explicitly so the model doesn't outsource its caution to a layer that
+       isn't actually a wall. If your setup uses a tight, real allow-list instead, delete this. -->
+- **Free-tier / second-opinion API budgets**: the cross-model `/angel --cross` leg shells out to external model CLIs (Gemini free-tier; an OpenAI-billed backend). Set a hard monthly cap and state it here (e.g. "never exceed $X/month without explicit permission").
 - **Where you physically sit**: `<workstation>` — keyboard, monitors, browser. Default assumption unless stated otherwise. So: any "open this URL" / "click this link" / OAuth callback / GUI interaction happens in `<workstation>`'s browser, not `<dev-box>`'s. For localhost callback flows from `<dev-box>`, use an SSH reverse tunnel so `<workstation>`'s browser can reach `<dev-box>`'s listener.
   <!-- If <dev-box> and <workstation> are the same machine, this whole split collapses —
        delete it. It only matters for headless/remote dev boxes. -->
@@ -121,7 +126,6 @@ User directs what to build; the model owns implementation. Machine legibility fi
 - **Google Workspace** (optional): a `gws`-style CLI used via Bash, not an MCP. Switch accounts with an env var pointing at a per-account config dir (see the `gmail` skill).
 - **Never commit**: `.env` files. **Always maintain**: `.env.example`. **Always commit**: `package-lock.json`
 - **Secrets**: keep them out of the repo and out of the model's context. See `scripts/scrub-secrets` (post-rotation scanner) and `docs/integrations.md` for the secret-handling pattern (committed `.envrc` + secrets at `~/.local/share/secrets/<name>.env`, never in-tree).
-- **Free-tier API budgets**: set your own hard cap and state it here (e.g. "never exceed $X/month without explicit permission").
 
 ## Session Management
 

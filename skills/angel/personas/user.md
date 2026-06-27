@@ -5,7 +5,6 @@ modes: [diff, full]
 experimental: false
 requires:
   any_of: [ui_surface, public_api, cli_entry, readme]
-prefers: []
 context:
   digest: no
   project_claude_md: no

@@ -34,7 +34,7 @@ NineAngel auto-detects which personas are relevant to your project from signals 
 | `naive`    | always                                | Cold read — unclear naming, dead code, confusing flow                           |
 | `adv`      | always                                | Security — injection, auth gaps, race conditions, secret leakage                |
 | `hyper`    | always                                | Hypercritical — over-engineering, cargo-cult patterns, lazy abstractions        |
-| `thousand` | always                                | Thousand-foot — wrong abstraction level, scope creep, simpler approaches        |
+| `blindspot`| always (full-project mode only)       | Finds capabilities, safeguards, states, or flows entirely absent from the code  |
 | `future`   | always                                | Future-Me — code clever only today, missing "why" comments, implicit coupling   |
 | `user`     | UI / public API / CLI / README        | UX walkthrough — meaningless errors, silent failures, broken flows              |
 | `fresh`    | package.json / lockfile / CI config   | Freshness — stale deps, hardcoded URLs/dates, deprecated patterns               |
@@ -48,8 +48,10 @@ NineAngel auto-detects which personas are relevant to your project from signals 
 | Short       | What it looks for                                                                           |
 |-------------|---------------------------------------------------------------------------------------------|
 | `install`   | Tests the soup-to-nuts install flow as a non-developer (runs project commands — opt-in by design) |
-| `blindspot` | Finds capabilities, safeguards, or flows entirely absent from the code (full-project only; **experimental**) |
+| `thousand`  | Thousand-foot — wrong abstraction level, scope creep, simpler approaches (opt-in since the 2026-06-06 Blindspot↔Thousand swap) |
 | `penny`     | Cost reviewer — lines, bytes, MB, $, cognitive load, maintenance burden ("rent test"; **experimental**) |
+| `pii`       | Raw-PII detector — personal data in logs, fixtures, dumps, serializers (**experimental**; runs first in the privacy pair) |
+| `deanon`    | Re-identification attacker — quasi-identifiers, reversible pseudonyms, linkage (**experimental**; always runs after `pii`) |
 
 Each persona's frontmatter (`personas/<short>.md`) declares its `default`, `modes`, `experimental` flag, and required signals. The orchestrator reads this at preflight; the frontmatter is the source of truth.
 
@@ -63,8 +65,13 @@ Each persona's frontmatter (`personas/<short>.md`) declares its `default`, `mode
 /angel -perf                  # standard battery minus Performance
 /angel --loop                 # review → fix → re-review (max 3 cycles)
 /angel penny --full           # opt-in persona on the whole project
-/angel --multiball=3          # run each persona 3x; integrator reconciles variance (occasional use; ~30+ subagents)
+/angel --multiball[=N]        # default-ON interactive at N=2 (N=3 on --full/--all); pass =N to override; integrator reconciles
+/angel --balls N              # explicit multiball pass-count override (alias for --multiball=N)
+/angel --no-multiball         # force single-pass (off-switch; alias: --single)
+/angel --model-override <tier># force all personas to one tier (haiku|sonnet|opus|fable); integrator unaffected (SKILL.md §5)
+/angel --reader               # enable the Bundle Reader (permanently default-off per ADR-01 — calibration showed no upside)
 /angel --fix-last             # apply the last review's fix batch in this project
+/angel <project-name>         # cd into the named project, then review it
 ```
 
 If detection would drop more than 2 default personas (or if signals are ambiguous), NineAngel asks before dispatching. Otherwise it proceeds silently with a one-line note.
@@ -95,9 +102,34 @@ Restart Claude Code. To verify the install: type `/help` in Claude Code; `/angel
 
 See `DESIGN.md` for architecture detail.
 
+## Unattended / scheduled reviews
+
+For `claude -p` runs (job queues, scheduled audits) use `unattended.md` instead of the interactive skill — same battery-selection logic, but it never asks questions and treats a failed pre-flight as a hard stop. Queue prompts reference it directly:
+
+```
+Read ~/.claude/skills/angel/unattended.md and follow it exactly.
+PROJECT_DIR: ~/Projects/{project}
+```
+
+Optional inputs: `PERSONAS: <comma-separated list>` (override detection), `MODE: diff | full` (default `full`), `REPORT_PATH`, `MODEL_OVERRIDE`, `RUN_TAG` — see `unattended.md`'s Inputs section.
+
+## Scripts
+
+Support tooling in `scripts/` (each script's header docstring is authoritative):
+
+- `mine-runs.py` — cross-run analytics: per-persona value table (does each persona earn its slot?) and portfolio summary + Critical-findings ledger. `mine-runs.py [--runs-dir DIR] [--since YYYY-MM-DD] [--json]`
+- `check-run-complete.py` — verifies a run dir persisted its artifacts (snapshot, usage.json, findings/, usage.log line). `check-run-complete.py <run_dir>` (exit 0/1) or `--all` to audit history.
+- `record-disposition.py` — upserts a per-finding disposition (`accepted` … `rejected-wrong`) into `<run_dir>/dispositions.json`; the precision signal mine-runs.py consumes. `record-disposition.py <run_dir> <finding_id> <disposition> [note]`
+- `recurrence-pilot.py` — cross-run finding-recurrence pilot: a no-new-logging outcome proxy (source of the ~40% Important+ reproducibility number).
+- `validate-personas.py` — drift guard: diffs `personas/*.md` against the SKILL.md §1 and unattended.md Step 3 model tables; exits nonzero on drift.
+- `init-run.sh` / `record-dispatch.sh` / `aggregate-usage.py` / `finalize-run.sh` — the run-lifecycle mechanisms: `init-run.sh` creates the run substrate (`eval "$(init-run.sh [PROJECT_DIR])"` sets `RUN_DIR`/`ENCODED_CWD`/`HANDOFF_DIR`); `record-dispatch.sh` appends each dispatch's `usage.jsonl` line and findings file; `aggregate-usage.py` rolls `usage.jsonl` into `usage.json`; `finalize-run.sh <RUN_DIR> [RUN_TAG]` is the single end-of-run gate (aggregate → usage.log append → completeness check).
+- `append-usage-log.sh` — internal: generates the canonical usage.log line; called by `finalize-run.sh`, never hand-formatted.
+- `finalize-calibration.py` — internal/retired: paired baseline+reader A/B markers for the concluded reader calibration (ADR-01).
+- `test_scripts.sh` — smoke tests pinning the script contracts. Run `bash scripts/test_scripts.sh`.
+
 ## Status
 
-Personal tool, used in production by the author. Stable enough to rely on; the persona roster evolves as new failure modes are encountered. Recently-added personas marked `experimental` in their frontmatter (currently `blindspot` and `penny`) are excluded from the auto-battery until they earn their slot — see `DESIGN.md` for graduation criteria.
+Personal tool, used in production by the author. Stable enough to rely on; the persona roster evolves as new failure modes are encountered. Personas marked `experimental` in their frontmatter (currently `penny`, `pii`, and `deanon`) are excluded from the auto-battery until they earn their slot — see `DESIGN.md` for graduation criteria. (`blindspot` graduated to the default battery in the 2026-06-06 swap with `thousand`.)
 
 ## License
 

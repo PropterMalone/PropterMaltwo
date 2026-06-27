@@ -9,6 +9,12 @@ Step 3 model table, reporting:
   - row parity    : a short-name in one table but not the other
   - tier drift    : model tier disagrees between SKILL.md and unattended.md
 
+Also enforces the persona frontmatter contract (DESIGN.md "Persona frontmatter
+contract"): required top-level keys (name, default, modes, experimental,
+requires.any_of), the full context: block (digest, project_claude_md,
+full_bundle, lane), and NO dead keys (prefers: — removed 2026-06-12, nothing
+reads it).
+
 Exit nonzero on any drift. (Models are written differently in the two tables —
 "Sonnet 4.6" vs "claude-sonnet-4-6" — so comparison is by tier substring.)
 
@@ -19,33 +25,83 @@ import re
 import sys
 from pathlib import Path
 
-TIER_RE = re.compile(r"\b(haiku|sonnet|opus)\b", re.I)
+TIER_RE = re.compile(r"\b(haiku|sonnet|opus|fable)\b", re.I)
 SHORT_RE = re.compile(r"[a-z][a-z-]{1,15}")
 
 
-def parse_rows(md_text):
+def parse_rows(md_text, source):
     """Extract (short, second_cell, tier) from model-table rows.
 
-    Filters to rows whose first cell is a short-name token and whose last cell
-    names a model tier — this naturally selects the model tables and skips
-    headers, separators, and unrelated tables.
+    A model table is one whose header's last cell is exactly "Model" — header
+    tracking (rather than per-row tier sniffing) means a row whose model string
+    matches no known tier is REPORTED as a problem instead of silently dropped
+    (the old TIER_RE filter made an unrecognized model invisible to every
+    downstream check). Returns (rows, problems).
     """
-    rows = []
+    rows, problems = [], []
+    in_model_table = False
     for line in md_text.splitlines():
         line = line.strip()
         if not line.startswith("|"):
+            in_model_table = False
             continue
         cells = [c.strip().strip("`").strip() for c in line.strip("|").split("|")]
-        if len(cells) < 3:
+        if all(set(c) <= set("-: ") for c in cells):
+            continue  # separator row
+        if cells and cells[-1].lower() == "model":
+            in_model_table = len(cells) >= 3  # header row opens a model table
+            continue
+        if not in_model_table or len(cells) < 3:
             continue
         short = cells[0]
         if not SHORT_RE.fullmatch(short):
+            problems.append(f"{source}: model-table row has a malformed short name ('{short}')")
             continue
         m = TIER_RE.search(cells[-1])
         if not m:
+            problems.append(f"{source}: '{short}' has an unrecognized model string ('{cells[-1]}') — "
+                            f"expected a haiku/sonnet/opus/fable tier")
             continue
         rows.append((short, cells[1], m.group(1).lower()))
-    return rows
+    return rows, problems
+
+
+REQUIRED_TOP = ("name", "default", "modes", "experimental", "requires", "context")
+REQUIRED_NESTED = ("any_of", "digest", "project_claude_md", "full_bundle", "lane")
+FORBIDDEN_KEYS = ("prefers",)
+
+
+def check_frontmatter(path):
+    """Enforce the persona frontmatter contract (DESIGN.md) on one persona file.
+
+    No YAML lib in stdlib, and the frontmatter is flat enough that key-presence
+    checks suffice: top-level keys are unindented `key:` lines, nested keys
+    (requires.any_of, the context block) are indented `key:` lines. Returns a
+    list of problem strings (empty = conformant).
+    """
+    rel = f"personas/{path.name}"
+    lines = path.read_text().splitlines()
+    if not lines or lines[0].strip() != "---":
+        return [f"{rel}: missing YAML frontmatter"]
+    try:
+        end = next(i for i, ln in enumerate(lines[1:], 1) if ln.strip() == "---")
+    except StopIteration:
+        return [f"{rel}: unterminated YAML frontmatter"]
+    fm = lines[1:end]
+    top = {ln.split(":")[0].strip() for ln in fm if ln and not ln[0].isspace() and ":" in ln}
+    nested = {ln.split(":")[0].strip() for ln in fm if ln and ln[0].isspace() and ":" in ln}
+    problems = []
+    for k in REQUIRED_TOP:
+        if k not in top:
+            problems.append(f"{rel}: frontmatter missing required key '{k}:'")
+    for k in REQUIRED_NESTED:
+        if k not in nested:
+            problems.append(f"{rel}: frontmatter missing required nested key '{k}:'")
+    for k in FORBIDDEN_KEYS:
+        if k in top or k in nested:
+            problems.append(f"{rel}: frontmatter carries dead key '{k}:' — remove it (nothing reads it; "
+                            f"the pii/deanon pairing is prose-enforced in SKILL.md §1/§4)")
+    return problems
 
 
 def main():
@@ -54,15 +110,18 @@ def main():
     args = ap.parse_args()
     sd = Path(args.skill_dir)
 
-    skill_rows = parse_rows((sd / "SKILL.md").read_text())
-    unatt_rows = parse_rows((sd / "unattended.md").read_text())
+    skill_rows, skill_problems = parse_rows((sd / "SKILL.md").read_text(), "SKILL.md")
+    unatt_rows, unatt_problems = parse_rows((sd / "unattended.md").read_text(), "unattended.md")
     files = {p.name for p in (sd / "personas").glob("*.md")}
 
     skill = {s: tier for s, _full, tier in skill_rows}
     unatt = {s: tier for s, _file, tier in unatt_rows}
     unatt_file = {s: f for s, f, _t in unatt_rows}
 
-    problems = []
+    problems = skill_problems + unatt_problems
+
+    for p in sorted((sd / "personas").glob("*.md")):
+        problems.extend(check_frontmatter(p))
 
     for s in sorted(skill.keys() - unatt.keys()):
         problems.append(f"row parity: '{s}' in SKILL.md but not unattended.md")

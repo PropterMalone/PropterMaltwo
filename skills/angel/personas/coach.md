@@ -5,7 +5,6 @@ modes: [diff, full]
 experimental: false
 requires:
   any_of: [prompt_files]
-prefers: []
 context:
   digest: yes
   project_claude_md: yes

@@ -20,6 +20,9 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # runs as __main__ from any CWD
+from persona_aliases import build_persona_aliases, canon_persona
+
 # Snapshot filename drift across run history. First parseable file with a
 # `findings` list wins. The canonical name (post-2026-05-30) is first.
 SNAPSHOT_CANDIDATES = [
@@ -88,6 +91,8 @@ def main():
     ap.add_argument("--json", action="store_true", help="emit machine JSON instead of report")
     args = ap.parse_args()
 
+    amap = build_persona_aliases(Path(__file__).resolve().parent.parent)
+
     runs_dir = Path(args.runs_dir)
     if not runs_dir.is_dir():
         print(f"no runs dir: {runs_dir}", file=sys.stderr)
@@ -118,6 +123,13 @@ def main():
     criticals = []                               # (date, project, title, personas)
     overlap = defaultdict(lambda: defaultdict(int))
     runs_meta = []
+    project_display = {}  # lower-key -> best display casing (case-insensitive project keying)
+
+    def register_project(key, raw):
+        cur = project_display.get(key)
+        # Prefer a cased name (e.g. "Subplot") over an all-lowercase variant ("subplot").
+        if cur is None or (raw != raw.lower() and cur == cur.lower()):
+            project_display[key] = raw
 
     for d in run_dirs:
         data, sname = load_snapshot(d)
@@ -136,7 +148,9 @@ def main():
         if any(f.get("evidence") for f in (data.get("findings") or [])):
             runs_with_evidence += 1
 
-        project = data.get("project") or d.name
+        proj_raw = (data.get("project") or d.name).strip()
+        project = proj_raw.lower()
+        register_project(project, proj_raw)
         projects.add(project)
         verdict = (data.get("verdict") or "?").strip()
         verdict_counts[verdict] += 1
@@ -146,8 +160,8 @@ def main():
         finding_personas = set()
         for f in findings:
             for p in (f.get("personas") or []):
-                finding_personas.add(p)
-        participants = set(data.get("personas_run") or []) | finding_personas
+                finding_personas.add(canon_persona(p, amap))
+        participants = {canon_persona(p, amap) for p in (data.get("personas_run") or [])} | finding_personas
         for p in participants:
             pruns[p] += 1
 
@@ -156,7 +170,7 @@ def main():
             if sev not in SEV:
                 sev = "noted"
             sev_totals[sev] += 1
-            ps = f.get("personas") or []
+            ps = list(dict.fromkeys(canon_persona(p, amap) for p in (f.get("personas") or [])))
             ev = f.get("evidence")
             fid = f.get("id")
             d_entry = dispmap.get(fid) if fid else None
@@ -187,6 +201,7 @@ def main():
             for pp in (usage.get("totals", {}).get("personas") or []):
                 nm, tk = pp.get("name"), pp.get("total_tokens")
                 if nm and isinstance(tk, (int, float)):
+                    nm = canon_persona(nm, amap)
                     ptokens[nm] += int(tk)
                     ptoken_runs[nm] += 1
 
@@ -233,17 +248,17 @@ def main():
                 } for p in personas
             },
             "portfolio": {
-                "runs": parsed, "projects": sorted(projects),
+                "runs": parsed, "projects": sorted(project_display.get(k, k) for k in projects),
                 "severity_totals": dict(sev_totals), "verdicts": dict(verdict_counts),
                 "criticals": [
-                    {"date": dt, "project": pr, "title": ti, "personas": pe}
+                    {"date": dt, "project": project_display.get(pr, pr), "title": ti, "personas": pe}
                     for dt, pr, ti, pe in criticals
                 ],
                 "overlap_important_plus": [
                     {"pair": [a, b], "count": c} for c, a, b in pairs
                 ],
             },
-            "runs": runs_meta,
+            "runs": [{**r, "project": project_display.get(r["project"], r["project"])} for r in runs_meta],
         }
         print(json.dumps(out, indent=2))
         return
@@ -308,6 +323,7 @@ def main():
         L.append("| date | project | finding | caught by |")
         L.append("|---|---|---|---|")
         for dt, pr, ti, pe in sorted(criticals):
+            pr = project_display.get(pr, pr)
             ti = (ti.replace("|", "\\|").replace("`", "'")
                     .replace("[", "\\[").replace("]", "\\]").replace("\n", " "))
             pr = pr.replace("|", "\\|").replace("\n", " ")

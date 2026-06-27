@@ -1,11 +1,10 @@
 ---
 name: thousand
-default: yes
+default: opt-in
 modes: [diff, full]
 experimental: false
 requires:
   any_of: [any]
-prefers: []
 context:
   digest: yes
   project_claude_md: yes

@@ -1,11 +1,10 @@
 ---
 name: blindspot
-default: opt-in
+default: yes
 modes: [full]
-experimental: true
+experimental: false
 requires:
   any_of: [any]
-prefers: []
 context:
   digest: yes
   project_claude_md: yes

@@ -67,3 +67,31 @@ Recommended layout (the reference setup's default):
 
 The rule behind all of it: a credential should never enter a file the model
 reads, a repo you push, or your shell history.
+
+## Cross-model review (`/angel --cross`)
+
+The `--cross` flag on the NineAngel review battery runs a **second opinion on a
+different model than Claude** — the one model-independence axis a same-model
+persona battery (all personas, all multiball passes, are Claude) structurally
+can't cover. It shells out to an external model CLI over the same diff, gates the
+findings (a verbatim code-quote must match the diff, plus a 0.6-confidence floor),
+and appends them as **advisory** — it never re-ranks or auto-merges into Claude's
+own Top 5.
+
+What you must supply (same bring-your-own pattern as the email seam above):
+
+- **A second-opinion model CLI on `PATH`.** The vendored
+  `skills/angel/scripts/xreview.py` defaults to the **`gemini`** CLI (Google's
+  Gemini CLI) and accepts `--backend codex` for the **OpenAI Codex** CLI. Install
+  and authenticate whichever you use. Without one, `--cross` fails with a clear
+  message and the main review proceeds unaffected — the cross leg must never block
+  or fail the report.
+
+Safety seam: `xreview.py` refuses to run under any path listed in the
+`XREVIEW_GUARD_PATHS` env var (colon-separated) — point it at directories holding
+code a third-party model must never see. Default empty (no guard).
+
+The same cross-model pass is baked into the **anonymization gate** too
+(`/angel pii deanon`, the De-Anon step): a different model re-checks the
+de-anonymization, because model-independence catches re-identification the
+same-model pass rationalizes away.

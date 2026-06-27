@@ -5,7 +5,6 @@ modes: [diff, full]
 experimental: false
 requires:
   any_of: [tests_dir_or_files, package_json]
-prefers: []
 context:
   digest: yes
   project_claude_md: yes

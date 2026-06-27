@@ -5,7 +5,6 @@ modes: [diff, full]
 experimental: true
 requires:
   any_of: [any]
-prefers: [deanon]
 context:
   digest: yes
   project_claude_md: yes
