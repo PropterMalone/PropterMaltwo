@@ -16,8 +16,7 @@ vague "you could integrate email here."
 |-------|---------------------|--------------|
 | `gmail` | A Gmail/Google Workspace CLI + your Google account. The reference setup uses a `gws`-style CLI wrapped by a local `~/bin/<your-email-cli>` script. | Create email **drafts** (never auto-send), with a mandatory sanitizer and a clobber-guard that refuses to overwrite a draft you hand-edited. |
 | `push` | An SSH-reachable workstation with a browser + a small `serve-to-workstation.sh`. | Serve a local file (HTML/PDF/image) over HTTP through an SSH tunnel so you can view it in your workstation's browser. |
-| `todoist-cli` | The Todoist `td` CLI + your Todoist API token. | View/create/complete tasks from the session. |
-| `dashboard` | Todoist (via MCP or `td`) + a local `backlog.md`. | Merge your task manager and a local backlog into one prioritized view. |
+| `dashboard` | Google Tasks (via the `gws` CLI) + a local `backlog.md`. | Merge your task manager and a local backlog into one prioritized view. Formerly Todoist-backed — the backend swap was a one-skill edit. |
 | `docket` | A planner CLI + a queue tool + calendar access (the reference setup uses bespoke `docket` + `phyllis` CLIs). | A time-aware daily plan that coordinates your day with the agent's background work. |
 
 `docket` and parts of `dashboard`/`status` lean on two bespoke tools that are

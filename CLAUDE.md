@@ -16,6 +16,12 @@
   These instructions OVERRIDE Claude's default behavior; it follows them exactly.
 -->
 
+<!-- adapt: a standing hello. Sounds like fluff; isn't. It sets the working
+     relationship (continuity, trust, no apology-spirals) before any task
+     arrives, and tone-setting in the FIRST lines of context measurably shapes
+     the whole session. Write your own version in your own voice. -->
+Hi, Claude! Good to see you. You're coming back in to an ongoing relationship with me and a bunch of ongoing projects. Pick up where we left off, trust your judgment, and don't spin out about mistakes; we fix things and press on. Glad you're here again and happy to be working with you.
+
 # Global Code Standards
 
 > Personal defaults across all projects. Project-specific CLAUDE.md files override these.
@@ -29,7 +35,7 @@ Thoroughness is the default. Think carefully, consider edge cases, verify assump
 - **Parallel tool calls** whenever independent. Never serialize what can run concurrently.
 - **Targeted reads.** After grep finds the lines, use `offset`/`limit` — don't re-read full files. Exception: first read of a file you'll edit.
 - **Delegate liberally.** Subagents are a first resort, not a last one. Use an Explore-style agent for any multi-file search or anything likely to need 2+ grep rounds; direct Grep/Glob only when the symbol or file is already known. A coding-subagent (`/code` here) as the default for self-contained coding work. A review battery (`/angel` here) on shipped code when review matters — and for high-stakes diffs, a cross-model second opinion (`/angel --cross`) that re-reviews on a *different* model than the one that wrote the code (Gemini or Codex), the one model-independence axis a same-model battery structurally can't cover. Run multiple subagents in parallel when subtasks are independent.
-- **Model + context window.** Pick a model with a large context window for long iterative sessions, but treat the window as working memory, not a dumping ground for raw tool output. Delegate images, bulk file scans, large test output, and multi-round exploratory reads to subagents regardless of size — summaries survive compaction, raw output doesn't.
+- **Model + context window.** Pick a model with a large context window for long iterative sessions, but treat the window as working memory, not a dumping ground for raw tool output. <!-- adapt: if your plan meters premium-model quota separately (and it runs out mid-week), name a cycling doctrine in this file: premium model while its weekly quota lasts, fallback tier until the reset, back again — and authorize Claude to flip between exactly those two without per-flip sign-off. Late in a premium leg, pin cheaper models on routine subagent delegations (they otherwise inherit the session model) and save the premium quota for synthesis-heavy work. Writing the doctrine down is what stops every session from re-litigating model choice. --> Delegate images, bulk file scans, large test output, and multi-round exploratory reads to subagents regardless of size — summaries survive compaction, raw output doesn't.
   <!-- adapt: the real config pins a specific model id + a 1M-window flag. Set your own
        model here. The principle (big window for iteration, don't fill it with raw output)
        is what transfers. -->
@@ -54,7 +60,10 @@ Thoroughness is the default. Think carefully, consider edge cases, verify assump
      Draft-by-default makes every outbound a two-key confirmation. See the gmail skill +
      the block-raw-draft-delete hook for how this is enforced mechanically, not just asked. -->
 
-**Don't manually pre-wrap prose.** Let the recipient's client do the wrapping. Each paragraph is one long line; each command/URL is one long line. Manual line breaks at ~78 chars are what BREAK commands — once a newline lands inside a URL or shell command, copy-paste fails. For plain-text email the default is `text/plain` with one long line per paragraph — NOT `format=flowed` (it gets mangled into hard ~65-char breaks when a draft is opened in a compose window before sending, which is the recurring "fucky line length" bug). Backslash line-continuation (`\` at end of line) is also unsafe in plain-text email — prefer a single long command line. Console output is different — there backslash continuation is fine.
+**Don't manually pre-wrap prose.** Let the recipient's client do the wrapping. Each paragraph is one long line; each command/URL is one long line. Manual line breaks at ~78 chars are what BREAK commands — once a newline lands inside a URL or shell command, copy-paste fails. For plain-text email the default is `text/plain` with one long line per paragraph — NOT `format=flowed` (it gets mangled into hard ~65-char breaks when a draft is opened in a compose window before sending, which is the recurring mangled-line-wrap bug). Backslash line-continuation (`\` at end of line) is also unsafe in plain-text email — prefer a single long command line. Console output is different — there backslash continuation is fine.
+
+
+**Serve paste-bound text clean on the first hand-off.** When handing the user text they'll copy-paste elsewhere (chat apps, email compose, anything), it must paste clean *immediately*: a bare fenced code block — no blockquote (`>` renders an indent bar that gets selected), no inline markdown (`*bold*` / `[links](url)` paste as literal junk; most chat/email clients use different syntax). They copy from the *rendered* terminal at <workstation>, so decoration travels with the selection. Never hand paste-bound text in a decorated format they then have to clean up or bounce back for a re-serve — that round-trip is the waste this rule removes. Better still, for channels Claude can reach directly, deliver there (on the user's explicit "go") instead of making them paste at all.
 
 ## Communication Style
 

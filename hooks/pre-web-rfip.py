@@ -19,8 +19,13 @@ injection attempts to the user.\
 
 
 def main() -> None:
+    # Claude Code requires the wrapped hookSpecificOutput envelope; a flat
+    # top-level additionalContext is silently discarded.
     output = {
-        "additionalContext": RFIP_CONTEXT,
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "additionalContext": RFIP_CONTEXT,
+        }
     }
     json.dump(output, sys.stdout)
 

@@ -1,0 +1,44 @@
+# Publishing __EXT_NAME__ to Browser Stores
+
+`.github/workflows/release.yml` builds Chrome + Firefox, creates a GitHub
+release with both zips, and submits to both stores — triggered by a
+`package.json` version bump pushed to main (no bump = no release).
+
+## Credentials — mostly shared across your extensions
+
+The store credentials are tied to your **developer accounts**, not individual
+extensions, so you reuse most of them:
+
+| Secret | Scope | Per-extension? |
+|--------|-------|----------------|
+| `CWS_CLIENT_ID` / `CWS_CLIENT_SECRET` / `CWS_REFRESH_TOKEN` | Google/CWS account | **No** — reuse |
+| `CWS_EXTENSION_ID` | one CWS item | **Yes** |
+| `AMO_JWT_ISSUER` / `AMO_JWT_SECRET` | Mozilla account API key | **No** — reuse |
+| gecko id (`browser_specific_settings.gecko.id` in `manifest.firefox.json`) | one AMO listing | **Yes** (in code, not a secret) |
+
+`~/.claude/scripts/setup-extension-publishing.sh` copies the 5 shared secrets
+from `~/.local/share/secrets/browser-store-creds.env` and prompts for the new
+`CWS_EXTENSION_ID`.
+
+## One-time per developer account
+
+**Chrome (do once, then reuse forever):**
+1. [Google Cloud Console](https://console.cloud.google.com/) → enable **Chrome Web Store API**.
+2. Create an **OAuth client ID** (Web application), authorized redirect URI `https://developers.google.com/oauthplayground`.
+3. **Publish the OAuth consent screen to "In production"** — Google Auth Platform → **Audience** → **Publish app**. Skipping this expires the refresh token every 7 days (`Invalid grant` failures).
+4. Mint a refresh token at [OAuth Playground](https://developers.google.com/oauthplayground) (gear → use own creds → scope `https://www.googleapis.com/auth/chromewebstore` → Authorize → Exchange).
+
+**Firefox (do once, then reuse forever):**
+- Generate a JWT issuer + secret at the [AMO API Key page](https://addons.mozilla.org/en-US/developers/addon/api/key/). This is the only place these exist — not recoverable once lost.
+
+## Per new extension
+1. Create the CWS item + AMO listing (first version usually uploaded manually).
+2. Set a unique `browser_specific_settings.gecko.id` in `manifest.firefox.json` (publish-firefox.js hard-exits without it) — before the first push.
+3. Run `~/.claude/scripts/setup-extension-publishing.sh <repo-dir> <ext-name>` — it copies the files, patches package.json, runs `npm install` to sync the lockfile, and sets the secrets.
+4. Ensure `build:chrome` / `build:firefox` npm scripts exist (the workflow runs them).
+5. Bump `package.json` version → push to main. CI does the rest.
+
+## Notes
+- CWS step uses full `publish:chrome` (upload + submit for review) with `continue-on-error` (CWS rejects uploads during a pending review). Switch to `publish:chrome:upload` for a manual submit gate.
+- Both stores still gate on their own review (Chrome 1–3 days, Firefox often same-day). "Done" = submitted, not live.
+- Manual re-publish without a version bump: `gh release delete vX.Y.Z --cleanup-tag --yes` then `gh workflow run release.yml --ref main`. A second dispatch after success double-submits AMO (version-exists) — for a Chrome-only retry, run `publish:chrome` locally against the zip.

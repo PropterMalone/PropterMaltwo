@@ -1,0 +1,1 @@
+{"tool_name": "Bash", "tool_input": {"command": "gmail draft --to x@example.com --ack-warnings"}}

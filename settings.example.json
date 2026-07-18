@@ -99,6 +99,26 @@
             "type": "command",
             "command": "python3 $HOME/.claude/hooks/block-raw-draft-delete.py",
             "timeout": 2
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/gh-identity-guard.py",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/gh-commit-author-guard.py",
+            "timeout": 12
+          }
+        ]
+      },
+      {
+        "matcher": "Skill|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/angel-multiball-guard.py",
+            "timeout": 2
           }
         ]
       }

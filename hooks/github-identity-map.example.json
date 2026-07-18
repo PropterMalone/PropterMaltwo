@@ -1,0 +1,28 @@
+{
+  "_comment": "Single source of truth for GitHub identity per repo. Read by the gh-identity-guard and gh-commit-author-guard PreToolUse hooks. ssh_host is the host-alias (from ~/.ssh/config) that decides push identity for SSH remotes; gh_account decides for HTTPS / gh-CLI ops. Tag each repo once: `git config claude.identity <id>`. Copy to ~/.claude/github-identity-map.json and edit.",
+  "identities": {
+    "PublicPseudonym": {
+      "gh_account": "PublicPseudonym",
+      "ssh_host": "github.com",
+      "user_name": "PublicPseudonym",
+      "user_email": "publicpseudonym@users.noreply.github.com",
+      "push": true,
+      "retired": false,
+      "note": "Pseudonym for public repos — must stay unlinked from your real name. WHY: the guard exists so a public push can never carry your personal identity by accident."
+    },
+    "your-personal-account": {
+      "gh_account": "your-personal-account",
+      "ssh_host": "github.com-personal",
+      "user_name": "Pat Personal",
+      "user_email": "pat@personal.example",
+      "push": true,
+      "retired": false,
+      "note": "Real-name account for private/employer work."
+    },
+    "local-only": {
+      "push": false,
+      "retired": false,
+      "note": "Repos that must never be pushed anywhere."
+    }
+  }
+}

@@ -147,7 +147,14 @@ def main() -> None:
     else:
         lines.append("Review these lines. If real credentials, move them to environment variables.")
 
-    output = {"additionalContext": "\n".join(lines)}
+    # Claude Code requires the wrapped hookSpecificOutput envelope; a flat
+    # top-level additionalContext is silently discarded.
+    output = {
+        "hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": "\n".join(lines),
+        }
+    }
     json.dump(output, sys.stdout)
 
 

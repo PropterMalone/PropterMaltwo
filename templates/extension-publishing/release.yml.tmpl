@@ -1,0 +1,128 @@
+name: Auto Release
+
+# Reusable extension release workflow. The extension short-name (used only for
+# the zip filenames) is filled in by setup-extension-publishing.sh at copy
+# time. See PUBLISHING.md.
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    paths-ignore:
+      - '.github/**'
+      - '**.md'
+  workflow_dispatch: # Allow manual re-publish without a version bump
+
+jobs:
+  check-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to create releases and tags
+
+    # Secrets mapped at job level so they are visible to each step's `if`
+    # guard. Step-level env is NOT available to that same step's `if` — the
+    # publish steps silently skip if you put these on the step instead.
+    # CWS_* and AMO_JWT_* are account-level: reuse across every extension you
+    # publish under the same Google / Mozilla developer account. Only
+    # CWS_EXTENSION_ID and the manifest gecko id are per-extension.
+    env:
+      CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+      CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+      CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+      CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+      AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+      AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Needed for checking existing tags
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Get version from package.json
+        id: package-version
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Check if tag exists
+        id: check-tag
+        run: |
+          if git rev-parse "v${{ steps.package-version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag v${{ steps.package-version.outputs.version }} already exists. Skipping release."
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install Dependencies
+        if: steps.check-tag.outputs.exists == 'false'
+        run: npm ci
+
+      - name: Run tests
+        if: steps.check-tag.outputs.exists == 'false'
+        run: npm run test
+
+      - name: Build Chrome
+        if: steps.check-tag.outputs.exists == 'false'
+        run: npm run build:chrome
+
+      - name: Zip Chrome
+        if: steps.check-tag.outputs.exists == 'false'
+        run: |
+          cd dist
+          zip -r ../__EXT_NAME__-v${{ steps.package-version.outputs.version }}-chrome.zip ./*
+          cd ..
+
+      - name: Build Firefox
+        if: steps.check-tag.outputs.exists == 'false'
+        run: npm run build:firefox
+
+      - name: Zip Firefox
+        if: steps.check-tag.outputs.exists == 'false'
+        run: |
+          cd dist
+          zip -r ../__EXT_NAME__-v${{ steps.package-version.outputs.version }}-firefox.zip ./*
+          cd ..
+
+      - name: Create Tag
+        if: steps.check-tag.outputs.exists == 'false'
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git tag -a v${{ steps.package-version.outputs.version }} -m "Release v${{ steps.package-version.outputs.version }}"
+          git push origin v${{ steps.package-version.outputs.version }}
+
+      - name: Create Release
+        if: steps.check-tag.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.package-version.outputs.version }}
+          name: v${{ steps.package-version.outputs.version }}
+          files: |
+            __EXT_NAME__-v${{ steps.package-version.outputs.version }}-chrome.zip
+            __EXT_NAME__-v${{ steps.package-version.outputs.version }}-firefox.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+
+      - name: Publish to Chrome Web Store
+        id: cws
+        continue-on-error: true # CWS rejects uploads while a review is pending
+        # Gated to a push on main (or a manual dispatch ON main) so a dispatch
+        # from a feature branch can't push an arbitrary build to the store.
+        if: steps.check-tag.outputs.exists == 'false' && env.CWS_CLIENT_ID != '' && contains(fromJSON('["refs/heads/main","refs/heads/master"]'), github.ref)
+        # Full publish (upload + submit for review) for hands-off releases.
+        run: npm run publish:chrome -- __EXT_NAME__-v${{ steps.package-version.outputs.version }}-chrome.zip
+
+      - name: Flag CWS publish failure (continue-on-error masks it otherwise)
+        if: steps.check-tag.outputs.exists == 'false' && steps.cws.outcome == 'failure'
+        run: echo "::warning::Chrome Web Store publish failed (tolerated via continue-on-error). If this was not a pending-review rejection, verify in the CWS dashboard — do not assume it shipped."
+
+      - name: Publish to Firefox AMO
+        if: steps.check-tag.outputs.exists == 'false' && env.AMO_JWT_ISSUER != '' && contains(fromJSON('["refs/heads/main","refs/heads/master"]'), github.ref)
+        run: npm run publish:firefox -- __EXT_NAME__-v${{ steps.package-version.outputs.version }}-firefox.zip

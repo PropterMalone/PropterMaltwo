@@ -45,7 +45,10 @@ All in one pass — touch only what changed this session. Batch the reads in par
 <!-- adapt: a real setup also kept a "slush" file — a dated scratch buffer of changes
      destined for an external task manager, trimmed to a 7-day window and
      consumed by a dashboard skill. If you have an external task manager, add an
-     equivalent step; otherwise this is just the backlog above. -->
+     equivalent step; otherwise this is just the backlog above. Trim enforcement
+     for such a file: delete every block older than a week, and delete any block
+     whose items have all been reconciled regardless of age — a scratch buffer
+     that's read on every dashboard call taxes every read if left to bloat. -->
 
 ## 3. Tidy the working tree
 
@@ -80,7 +83,9 @@ Keyword matching is noisy but cheap. False-positive friction is acceptable; miss
 
 Write to the per-project memory dir (or `<memory-dir>` from `~`). Standard format: What was done, What needs doing next, Key context. **Soft size cap: ~2KB.** Bullet points, not paragraphs. Full session history belongs in `calibration.md`; the handoff is for next-session orientation, not logging — kickoff reads it in full and re-pays the token cost on each session-start.
 
-If a handoff for today already exists, write to `handoff_YYYY-MM-DD-HHMM.md` with a current-time suffix (don't overwrite — multiple wraps per day are legitimate). Delete handoffs >7 days old. **If at 95% context, write this FIRST.**
+**Promote durable facts out of the handoff before they age out.** Handoffs are transient — if you prune old ones on a schedule, and MEMORY.md drops their index pointers when pruned, a fact that lives *only* in a handoff is a fact you'll lose at the next prune. Before finalizing the handoff, move anything that should outlive this session — infra IDs, credential locations, architectural decisions, non-obvious constraints — into the right topic file (Step 2), and reference it from the handoff rather than burying it there.
+
+If a handoff for today already exists, write to `handoff_YYYY-MM-DD-HHMM.md` with a current-time suffix (don't overwrite — multiple wraps per day are legitimate). Delete handoffs >7 days old, unless you've centralized that pruning elsewhere (e.g. a daily cron script plus a retro ref-cleanup step) — in that case, don't delete handoffs here; let the centralized job own it. **If at 95% context, write this FIRST.**
 
 ## 5. Queue reconciliation (example integration — skip if you don't run a queue)
 
@@ -117,6 +122,8 @@ If a pending-diffs file exists and is non-empty, review each entry:
 6. Note in the session summary how many diffs were processed, and flag any newly-promoted patterns.
 
 If the scanner errors (auth expired, etc.), it should exit cleanly — don't block wrap on this step. Delete the whole step if you don't draft messages.
+
+**A draft ledger fed by one channel is blind to other channels.** If your draft-logging mechanism only instruments one tool (e.g. an email wrapper), drafts created through a different surface (e.g. a chat app's native draft feature) won't appear in it. For any such draft the user was handed this session, manually re-read the target thread/channel to confirm whether it was sent and capture what *actually* went out — the same edit-before-send risk applies as email. Note sent-vs-draft status and any edits in the session summary.
 
 ## 7.5. Auto-review of shipped code (example integration with the review battery)
 

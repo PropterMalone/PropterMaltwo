@@ -96,7 +96,14 @@ def main() -> None:
     lines.append("")
     lines.append("Address these before considering the implementation complete.")
 
-    output = {"additionalContext": "\n".join(lines)}
+    # Claude Code requires the wrapped hookSpecificOutput envelope; a flat
+    # top-level additionalContext is silently discarded.
+    output = {
+        "hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": "\n".join(lines),
+        }
+    }
     json.dump(output, sys.stdout)
 
 

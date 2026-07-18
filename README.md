@@ -72,11 +72,28 @@ Read `CLAUDE.md` itself; it's annotated. The placeholder convention is at the to
   - **Workflow core** — `/code` (delegate a coding task to a subagent to keep the
     main context clean), `/chain` (run a sequence of audits, each in a fresh
     subagent), `/status` (one-shot view of live background work), `/style`.
-  - **Integration stubs** — `/gmail`, `/push`, `/todoist-cli`, `/dashboard`,
-    `/docket`. These wire to outside tools you supply; they ship as working
-    examples of the pattern, not turnkey features. See
+  - **Integration stubs** — `/gmail`, `/push`, `/dashboard`, `/docket`. These
+    wire to outside tools you supply; they ship as working examples of the
+    pattern, not turnkey features. (`/dashboard` now targets Google Tasks —
+    the Todoist variant was retired after a task-manager migration; swapping
+    the backend was a one-skill edit, which is the point of the pattern.) See
     [`docs/integrations.md`](docs/integrations.md).
 - **Hooks** (`hooks/`) — the automation layer that doesn't rely on memory:
+  - **GitHub identity guards** (`gh-identity-guard.py` +
+    `gh-commit-author-guard.py`) — new since the last share, and the piece I'd
+    least want to run without if you publish under a pseudonym. A per-repo
+    identity tag (`git config claude.identity <id>`) is validated against a
+    single identity map (`github-identity-map.example.json`) before any
+    push/repo-create/commit: wrong SSH host alias, wrong gh account, wrong
+    author for the tag → deny with a fix-and-retry message. Fail-closed,
+    pure-validator (no side effects), accident-prevention threat model —
+    static parsing won't stop a determined adversary, but it reliably
+    catches the realistic accident class in testing. Ships with a self-contained
+    61-case behavioral suite (`test-gh-identity-hooks.py`) — behavioral tests
+    matter for guards, because a guard broken by a stray refactor fails OPEN
+    and looks identical to a working one.
+  - `angel-multiball-guard.py` — enforces the review-battery floor (single-pass
+    reviews get denied when doctrine says N≥2).
   - `post-edit-secret-scan.py` — scans every edit for leaked keys.
   - `post-edit-stub-check.py` — flags TODO/FIXME/unimplemented left behind.
   - `pre-web-rfip.py` — a prompt-injection defense before web fetches.
