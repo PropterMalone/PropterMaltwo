@@ -155,7 +155,7 @@ Then make it yours: open `CLAUDE.md` and replace the `<placeholders>`, wire any
 integrations you want ([`docs/integrations.md`](docs/integrations.md)), and start
 a session with `/kickoff`.
 
-## Honest caveat on portability
+## On portability
 
 I genuinely don't know how much of this transfers. The people I've handed it to
 get *some* use out of it, but I can't tell whether they get as much as I do, more,
