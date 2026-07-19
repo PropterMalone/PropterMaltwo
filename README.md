@@ -4,13 +4,8 @@ My actual Claude Code environment, genericized for sharing. If you sat down at
 a blank machine, this is what you'd lay down to work the way I work. Drop it
 onto `~/.claude`, plug in your own data, and go.
 
-## The thesis
-
-Most of how I've gotten better at using Claude Code over the last year isn't my
-skill improving. It's changes to this environment. The model is the same one you
-have. The difference is the standing instructions, the memory that carries across
-sessions, the review battery, and the hooks that catch mistakes mechanically
-instead of relying on anyone remembering. That's the stuff in here.
+Most of how I've gotten better at using Claude Code this year isn't so much my
+personal, human skill improving as it is changes I've made to this environment.
 
 ## The basics, if you're new to this
 
