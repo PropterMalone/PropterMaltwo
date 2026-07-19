@@ -1,15 +1,8 @@
 # PropterMaltwo
 
-My actual Claude Code environment, genericized for sharing: the machinery, not
-my data. It's the answer to a real question someone asked me on Bluesky: *what do
-you actually put in your `.md` files?* Everything they'd found was either "load
-this 50k-line file and trust me" or a vague description of what the files
-supposedly do. This is the in-between: the real config, with the personal
-specifics swapped for `<placeholders>` and inline notes explaining *why* each
-piece is there.
-
-If you sat down at a blank machine, this is what you'd lay down to work the way I
-work. Drop it onto `~/.claude`, plug in your own data, and go.
+My actual Claude Code environment, genericized for sharing. If you sat down at
+a blank machine, this is what you'd lay down to work the way I work. Drop it
+onto `~/.claude`, plug in your own data, and go.
 
 ## The thesis
 
