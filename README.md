@@ -9,8 +9,6 @@ personal, human skill improving as it is changes I've made to this environment.
 
 ## The basics, if you're new to this
 
-A few things the rest of this README assumes, spelled out.
-
 Everything I do is a project, and a project is a folder. Each app, bot,
 research question, or one-off pipeline gets its own folder under
 `~/Projects/<name>`, and each folder is a git repo. Claude Code keys on this:
