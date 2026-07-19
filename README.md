@@ -1,6 +1,6 @@
 # PropterMaltwo
 
-My actual Claude Code environment, genericized for sharing — the machinery, not
+My actual Claude Code environment, genericized for sharing: the machinery, not
 my data. It's the answer to a real question someone asked me on Bluesky: *what do
 you actually put in your `.md` files?* Everything they'd found was either "load
 this 50k-line file and trust me" or a vague description of what the files
@@ -14,7 +14,7 @@ work. Drop it onto `~/.claude`, plug in your own data, and go.
 ## The thesis
 
 Most of how I've gotten better at using Claude Code over the last year isn't my
-skill improving — it's changes to this environment. The model is the same one you
+skill improving. It's changes to this environment. The model is the same one you
 have. The difference is the standing instructions, the memory that carries across
 sessions, the review battery, and the hooks that catch mistakes mechanically
 instead of relying on anyone remembering. That's the stuff in here.
@@ -67,13 +67,13 @@ cron, systemd, and git.
 ## What's in the `.md` files, and why
 
 `CLAUDE.md` is the global instruction file Claude Code loads for every project.
-Mine isn't a pile of "be helpful" platitudes — it's a set of corrections for
+Mine isn't a pile of "be helpful" platitudes. It's a set of corrections for
 specific, recurring failure modes. The load-bearing parts:
 
 - **Don't anchor dev-time estimates on human timelines.** Models are trained
   mostly on humans estimating their own dev work, so they inherit a systematic
   *over*-estimate. Left uncorrected, that bias makes the model recommend
-  deferring or shrinking work it could just ship — and worse, miss trades where
+  deferring or shrinking work it could just ship, and miss trades where
   30 minutes of upfront refactor saves 20 hours of compute. So: apply the
   correction *before* quoting, and track estimate-vs-actual so the calibration is
   real, not vibes.
@@ -82,19 +82,19 @@ specific, recurring failure modes. The load-bearing parts:
   Recalled is the weakest tier; for anything that matters, run the cheap check
   first. Collapsing these tiers is how confident-but-wrong happens.
 - **A review gate for high-blast-radius decisions.** Before locking in anything
-  downstream will treat as authoritative — an architecture decision, a public
-  message, an irreversible schema change — offer to run the review battery first.
+  downstream will treat as authoritative (an architecture decision, a public
+  message, an irreversible schema change), offer to run the review battery first.
   The trigger is blast radius, not effort.
 - **Direct communication, Strunk & White density.** Push back on bad ideas, omit
   needless words, active voice, concrete language. Stated as rules because the
   default drifts toward hedging and filler.
 - **The 3-strike rule.** If three fixes haven't resolved it, the model of the
-  problem is wrong — stop and reassess instead of flailing a fourth time.
+  problem is wrong. Stop and reassess instead of flailing a fourth time.
 
 `rules/quality.md` and `rules/testing.md` go deeper on two of these: a
 quality framework (calibration, falsifiability, verification tier) and testing
 discipline (TDD, mock only the boundaries, colocate tests). Those two are
-general doctrine — use them as-is, adapting any examples to your own work.
+general doctrine; use them as-is, adapting any examples to your own work.
 
 Read `CLAUDE.md` itself; it's annotated. The placeholder convention is at the top.
 
@@ -106,7 +106,7 @@ Read `CLAUDE.md` itself; it's annotated. The placeholder convention is at the to
   external pointers). Three skills operate it: `/kickoff` orients at the start,
   `/wrap` writes the deltas at the end, `/retro` does periodic maintenance. Full
   writeup in [`docs/memory-system.md`](docs/memory-system.md). This is the single
-  highest-leverage component — it's what makes session N+1 start warm.
+  highest-leverage component: it's what makes session N+1 start warm.
 - **Skills** (`skills/`):
   - **NineAngel (`/angel`)** — a multi-persona code-review battery (19 calibrated
     reviewer personas + an integrator), with an optional cross-model second opinion
@@ -119,22 +119,22 @@ Read `CLAUDE.md` itself; it's annotated. The placeholder convention is at the to
     subagent), `/status` (one-shot view of live background work), `/style`.
   - **Integration stubs** — `/gmail`, `/push`, `/dashboard`, `/docket`. These
     wire to outside tools you supply; they ship as working examples of the
-    pattern, not turnkey features. (`/dashboard` now targets Google Tasks —
-    the Todoist variant was retired after a task-manager migration; swapping
+    pattern, not turnkey features. (`/dashboard` now targets Google Tasks;
+    the Todoist variant was retired after a task-manager migration, and swapping
     the backend was a one-skill edit, which is the point of the pattern.) See
     [`docs/integrations.md`](docs/integrations.md).
 - **Hooks** (`hooks/`) — the automation layer that doesn't rely on memory:
   - **GitHub identity guards** (`gh-identity-guard.py` +
-    `gh-commit-author-guard.py`) — new since the last share, and the piece I'd
+    `gh-commit-author-guard.py`), new since the last share, and the piece I'd
     least want to run without if you publish under a pseudonym. A per-repo
     identity tag (`git config claude.identity <id>`) is validated against a
     single identity map (`github-identity-map.example.json`) before any
     push/repo-create/commit: wrong SSH host alias, wrong gh account, wrong
     author for the tag → deny with a fix-and-retry message. Fail-closed,
-    pure-validator (no side effects), accident-prevention threat model —
-    static parsing won't stop a determined adversary, but it reliably
+    pure-validator (no side effects), accident-prevention threat model.
+    Static parsing won't stop a determined adversary, but it reliably
     catches the realistic accident class in testing. Ships with a self-contained
-    61-case behavioral suite (`test-gh-identity-hooks.py`) — behavioral tests
+    61-case behavioral suite (`test-gh-identity-hooks.py`). Behavioral tests
     matter for guards, because a guard broken by a stray refactor fails OPEN
     and looks identical to a working one.
   - `angel-multiball-guard.py` — enforces the review-battery floor (single-pass
@@ -148,8 +148,8 @@ Read `CLAUDE.md` itself; it's annotated. The placeholder convention is at the to
 - **`settings.example.json`** — wires the hooks + statusline and ships a sane
   permission posture: file edits auto-accept, but force-push / `reset --hard` /
   `restore` are denied and `rm -rf` / `git push` ask first. (My own config allows
-  all Bash and leans on those rails; the shipped default is more conservative —
-  widen it once you trust it.)
+  all Bash and leans on those rails; the shipped default is more conservative.
+  Widen it once you trust it.)
 
 ## Install
 
@@ -161,7 +161,7 @@ cd PropterMaltwo
 ```
 
 `install.sh` copies the machinery into `~/.claude/`, backing up anything it would
-overwrite. It **never** clobbers your existing `settings.json` — it drops
+overwrite. It **never** clobbers your existing `settings.json`; it drops
 `settings.example.json` next to it and tells you what to merge. Re-running is
 safe. See `./install.sh --help`.
 
@@ -174,7 +174,7 @@ a session with `/kickoff`.
 I genuinely don't know how much of this transfers. The people I've handed it to
 get *some* use out of it, but I can't tell whether they get as much as I do, more,
 or less. A lot of it is shaped to one person's brain and one person's failure
-modes — the dev-time correction matters because *I* kept deferring shippable work;
+modes. The dev-time correction matters because *I* kept deferring shippable work;
 your biases are different. Take it as a worked example to strip for parts, not a
 framework to adopt whole. The parts I'd bet travel best: the memory system, the
 evidence-tier rule, and NineAngel. The rest, your mileage will vary.
