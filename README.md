@@ -160,8 +160,7 @@ a session with `/kickoff`.
 I genuinely don't know how much of this transfers. The people I've handed it to
 get *some* use out of it, but I can't tell whether they get as much as I do, more,
 or less. A lot of it is shaped to one person's brain and one person's failure
-modes. The dev-time correction matters because *I* kept deferring shippable work;
-your biases are different. Take it as a worked example to strip for parts, not a
+modes. Take it as a worked example to strip for parts, not a
 framework to adopt whole. The parts I'd bet travel best: the memory system, the
 evidence-tier rule, and NineAngel. The rest, your mileage will vary.
 
