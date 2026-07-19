@@ -54,7 +54,7 @@ cron, systemd, and git.
 
 `CLAUDE.md` is the global instruction file Claude Code loads for every project.
 Mine is mostly a set of corrections for
-specific, recurring failure modes. The load-bearing parts:
+specific, recurring failure modes.
 
 - **Don't anchor dev-time estimates on human timelines.** Models are trained
   mostly on humans estimating their own dev work, so they inherit a systematic
