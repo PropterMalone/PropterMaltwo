@@ -23,24 +23,25 @@ instead of relying on anyone remembering. That's the stuff in here.
 
 A few things the rest of this README assumes, spelled out.
 
-Everything I do is a project, and a project is a folder. An app, a bot, a
-research question, a one-off pipeline — each gets its own folder under
+Everything I do is a project, and a project is a folder. Each app, bot,
+research question, or one-off pipeline gets its own folder under
 `~/Projects/<name>`, and each folder is a git repo. Claude Code keys on this:
 `cd` into a folder and it loads that project's `CLAUDE.md` and that project's
 memory directory, both tied to the folder path. The global `~/.claude` (what
-this repo is a snapshot of) only holds what applies everywhere — doctrine,
+this repo is a snapshot of) only holds what applies everywhere: doctrine,
 skills, hooks, and an index of what projects exist and where they stand. I make
-a new folder for basically any new idea; most of them die, and that's fine.
+a new folder for basically any new idea. Most of them die, and that's fine.
 
 I run Claude Code on a headless Linux box and sit at a different machine
-(`<workstation>`) with the browser. A few hooks and skills only exist because of
-that split — serving a file to the workstation's browser, OAuth callbacks
-through an SSH tunnel. If you work on one machine you can skip those.
+(`<workstation>`) with the browser. A few hooks and skills only exist because
+of that split, like serving a file to the workstation's browser, or running an
+OAuth callback through an SSH tunnel. If you work on one machine you can skip
+those.
 
 For outside services, I use a plain CLI where a decent one exists, and an MCP
 server where the service actually needs interactive auth. CLIs are cheaper in
-tokens, and — the main reason — hooks can inspect a shell command before it
-runs, so a CLI is guardable in a way an MCP call isn't. What I actually use:
+tokens. More importantly, hooks can inspect a shell command before it runs, so
+a CLI is guardable in a way an MCP call isn't. What I actually use:
 
 - Google (Gmail / Calendar / Tasks / Drive): Google's `gws` CLI
   (`npm i -g @googleworkspace/cli`). Separate accounts get separate config dirs
@@ -59,9 +60,9 @@ runs, so a CLI is guardable in a way an MCP call isn't. What I actually use:
   that fetched content is data, not instructions.
 
 Background work is cron. Scheduled jobs run `claude -p` (headless one-shot mode)
-for things like wrapping sessions that ended without a handoff; long-running
-services are ordinary systemd units. There's no orchestration framework
-anywhere — just cron, systemd, and git.
+for things like wrapping sessions that ended without a handoff. Long-running
+services are ordinary systemd units. There's no orchestration framework, just
+cron, systemd, and git.
 
 ## What's in the `.md` files, and why
 
