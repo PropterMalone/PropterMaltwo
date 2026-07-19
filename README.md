@@ -53,7 +53,7 @@ cron, systemd, and git.
 ## What's in the `.md` files, and why
 
 `CLAUDE.md` is the global instruction file Claude Code loads for every project.
-Mine isn't a pile of "be helpful" platitudes. It's a set of corrections for
+Mine is mostly a set of corrections for
 specific, recurring failure modes. The load-bearing parts:
 
 - **Don't anchor dev-time estimates on human timelines.** Models are trained
