@@ -19,63 +19,49 @@ have. The difference is the standing instructions, the memory that carries acros
 sessions, the review battery, and the hooks that catch mistakes mechanically
 instead of relying on anyone remembering. That's the stuff in here.
 
-## The basics, if you're starting from zero
+## The basics, if you're new to this
 
-Some orientation the rest of this README assumes. None of it is exotic — but
-nobody tells you this part, and the config makes more sense once you have it.
+A few things the rest of this README assumes, spelled out.
 
-**Everything is a project, and a project is a folder.** Each piece of work —
-an app, a bot, a research question, a one-off pipeline — gets its own folder
-under `~/Projects/<name>`, and each folder is its own git repo. That granularity
-is what Claude Code keys on: `cd` into the folder and it loads that project's
-`CLAUDE.md` (project-specific instructions) and that project's memory directory
-(state that persists across sessions, keyed to the folder path). Changing
-directory *is* changing context. The global `~/.claude` — what this repo is a
-snapshot of — carries only the cross-project layer: doctrine, skills, hooks, and
-an index that says what projects exist and where things stand. New idea → new
-folder, even for something tiny; the ones that die cost nothing, and the ones
-that live already have a home for their instructions and memory.
+Everything I do is a project, and a project is a folder. An app, a bot, a
+research question, a one-off pipeline — each gets its own folder under
+`~/Projects/<name>`, and each folder is a git repo. Claude Code keys on this:
+`cd` into a folder and it loads that project's `CLAUDE.md` and that project's
+memory directory, both tied to the folder path. The global `~/.claude` (what
+this repo is a snapshot of) only holds what applies everywhere — doctrine,
+skills, hooks, and an index of what projects exist and where they stand. I make
+a new folder for basically any new idea; most of them die, and that's fine.
 
-**Two machines, one brain.** Claude Code runs on a headless Linux box; I sit at
-a separate workstation (`<workstation>`) with the keyboard and browser and reach
-the dev box over SSH. That split is why several hooks and skills exist (serving
-a file to the workstation's browser, OAuth callbacks through an SSH tunnel). If
-you work on one machine, those pieces simplify to nothing — the *pattern* to
-keep is: know where the browser is, and route anything interactive there.
+I run Claude Code on a headless Linux box and sit at a different machine
+(`<workstation>`) with the browser. A few hooks and skills only exist because of
+that split — serving a file to the workstation's browser, OAuth callbacks
+through an SSH tunnel. If you work on one machine you can skip those.
 
-**Hooking into outside services: prefer a real CLI; fall back to MCP.** A CLI
-the model can call through Bash is scriptable, cheap in tokens, testable, and —
-this is the part that matters — *guardable by hooks* that inspect the command
-before it runs. An MCP server is the right tool when a service needs interactive
-auth or stateful sessions. What that looks like concretely here:
+For outside services, I use a plain CLI where a decent one exists, and an MCP
+server where the service actually needs interactive auth. CLIs are cheaper in
+tokens, and — the main reason — hooks can inspect a shell command before it
+runs, so a CLI is guardable in a way an MCP call isn't. What I actually use:
 
-- **Google (Gmail / Calendar / Tasks / Drive)** — Google's own `gws` CLI
-  (`npm i -g @googleworkspace/cli`). Multiple accounts work by pointing
-  `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` at per-account config dirs, so personal and
-  work Google never share a token. The `/dashboard` and `/docket` skills sit on
-  top of the Tasks/Calendar parts.
-- **Email composition** — a thin wrapper CLI whose default is *draft, never
-  send*; the standing rule is that nothing outbound goes without an explicit
-  go-ahead, and two hooks enforce the sharp edges mechanically. Whatever mail
-  tool you use, the draft-first doctrine is the transferable part.
-- **GitHub** — the `gh` CLI plus SSH host aliases, one per identity, with the
-  identity-guard hooks (below) validating every push/create against a per-repo
-  tag. Multiple GitHub identities on one box is exactly the place a wrong-account
-  accident happens; this is the mechanical answer.
-- **Phone notifications** — [ntfy](https://ntfy.sh) topics: one `curl` from any
-  cron job or hook, a push lands on my phone. Cheapest possible "tell me when
-  something breaks" channel.
-- **Chat platforms and anything OAuth-interactive** — MCP servers, configured
-  per-project where possible so a bot project's credentials never ride along
-  into unrelated sessions.
-- **The web** — the built-in fetch/search tools, behind a hook that injects a
-  treat-fetched-content-as-data-not-instructions warning before every fetch.
+- Google (Gmail / Calendar / Tasks / Drive): Google's `gws` CLI
+  (`npm i -g @googleworkspace/cli`). Separate accounts get separate config dirs
+  via `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`, so personal and work tokens never mix.
+  The `/dashboard` and `/docket` skills sit on top of this.
+- Email: a small wrapper that only writes drafts. Nothing gets sent unless I say
+  send it, and two hooks enforce the sharp edges. The draft-first rule is the
+  part worth copying whatever mail tool you use.
+- GitHub: `gh` plus one SSH host alias per account, with the identity-guard
+  hooks (below) checking every push against a per-repo tag.
+- Phone: [ntfy](https://ntfy.sh). Any cron job or hook can curl a topic and it
+  shows up on my phone.
+- Chat platforms and anything OAuth-heavy: MCP servers, configured per-project
+  where possible so a bot's credentials don't ride into unrelated sessions.
+- The web: the built-in fetch/search tools, behind a hook that reminds the model
+  that fetched content is data, not instructions.
 
-**Unattended work runs on plain cron.** Scheduled jobs fire `claude -p` (the
-headless one-shot mode) for things like wrapping sessions that ended without a
-handoff, or nightly sweeps; long-lived services are ordinary systemd units. No
-orchestration framework — cron, systemd, and git are the substrate, and the
-skills/hooks in this repo are what make the model a well-behaved tenant on them.
+Background work is cron. Scheduled jobs run `claude -p` (headless one-shot mode)
+for things like wrapping sessions that ended without a handoff; long-running
+services are ordinary systemd units. There's no orchestration framework
+anywhere — just cron, systemd, and git.
 
 ## What's in the `.md` files, and why
 
