@@ -59,10 +59,17 @@ specific, recurring failure modes.
 - **Don't anchor dev-time estimates on human timelines.** Models are trained
   mostly on humans estimating their own dev work, so they inherit a systematic
   *over*-estimate. Left uncorrected, that bias makes the model recommend
-  deferring or shrinking work it could just ship, and miss trades where
-  30 minutes of upfront refactor saves 20 hours of compute. So: apply the
-  correction *before* quoting, and track estimate-vs-actual so the calibration is
-  real, not vibes.
+  deferring or shrinking work it could just ship, and miss trades where upfront
+  development saves substantial compute time. Apply the correction *before*
+  quoting, and track estimate-vs-actual so the calibration is real, not vibes.
+  Quote the *critical path* rather than the sum when subagents run independent
+  tails, and price work in *tool-call rounds* rather than corrected human-minutes.
+- **Cost is price times turns.** A token held in the driver's context is re-read
+  on every later turn. Model choice moves the price; session shape moves the
+  turns. That one fact drives the delegation doctrine (a subagent's context dies
+  with it, so its tool output is paid once), `/clear` at arc boundaries, and the
+  rule that a premium model is a tracked, time-boxed stint and never the saved
+  default.
 - **Evidence tiers for load-bearing claims.** Before relaying anything you'll act
   on, tag the source: `[ran: …]` (saw it execute) / `[read: file:line]` / `[recalled: …]`.
   Recalled is the weakest tier; for anything that matters, run the cheap check
@@ -79,8 +86,13 @@ specific, recurring failure modes.
 
 `rules/quality.md` and `rules/testing.md` go deeper on two of these: a
 quality framework (calibration, falsifiability, verification tier) and testing
-discipline (TDD, mock only the boundaries, colocate tests). Those two are
-general doctrine; use them as-is, adapting any examples to your own work.
+discipline (TDD, mock only the boundaries, colocate tests). `rules/glossary.md`
+pins the meaning of the words that cause bugs when two projects use them
+differently (gate, bounded, dry run vs shadow mode, proposal vs action), and
+`rules/comms.md` covers sweeping a shared message inbox with a per-project
+cursor so one project's acknowledgement can't hide an item from another. All
+four are general doctrine; use them as-is, adapting any examples to your own
+work. `SETUP.md` is the new-project checklist `CLAUDE.md` points at.
 
 Read `CLAUDE.md` itself; it's annotated. The placeholder convention is at the top.
 
@@ -93,9 +105,14 @@ Read `CLAUDE.md` itself; it's annotated. The placeholder convention is at the to
   `/wrap` writes the deltas at the end, `/retro` does periodic maintenance. Full
   writeup in [`docs/memory-system.md`](docs/memory-system.md). This is the single
   highest-leverage component: it's what makes session N+1 start warm.
+- **Decision records** — per-project ADRs plus a shared "house" tier, each with
+  a `falsifier_cmd` that a weekly sweep runs (`scripts/adr-sweep.py`) and that
+  `/retro` adjudicates. A decision that can't name the command that would prove
+  it wrong is a vibe with a date on it. Lifecycle in
+  [`docs/decision-records.md`](docs/decision-records.md).
 - **Skills** (`skills/`):
-  - **NineAngel (`/angel`)** — a multi-persona code-review battery (19 calibrated
-    reviewer personas + an integrator), with an optional cross-model second opinion
+  - **NineAngel (`/angel`)** — a multi-persona code-review battery with calibrated
+    reviewers and an integrator, plus an optional cross-model second opinion
     (`--cross`) that reviews the same diff on a different model than Claude. Vendored
     from its own repo. The headline.
     Canonical, maintained copy: https://github.com/PropterMalone/NineAngel
@@ -103,7 +120,7 @@ Read `CLAUDE.md` itself; it's annotated. The placeholder convention is at the to
   - **Workflow core** — `/code` (delegate a coding task to a subagent to keep the
     main context clean), `/chain` (run a sequence of audits, each in a fresh
     subagent), `/status` (one-shot view of live background work), `/style`.
-  - **Integration stubs** — `/gmail`, `/push`, `/dashboard`, `/docket`. These
+  - **Integration stubs** — `/gmail`, `/push`, `/prose`, `/dashboard`, `/docket`. These
     wire to outside tools you supply; they ship as working examples of the
     pattern, not turnkey features. (`/dashboard` now targets Google Tasks;
     the Todoist variant was retired after a task-manager migration, and swapping
@@ -111,8 +128,8 @@ Read `CLAUDE.md` itself; it's annotated. The placeholder convention is at the to
     [`docs/integrations.md`](docs/integrations.md).
 - **Hooks** (`hooks/`) — the automation layer that doesn't rely on memory:
   - **GitHub identity guards** (`gh-identity-guard.py` +
-    `gh-commit-author-guard.py`), new since the last share, and the piece I'd
-    least want to run without if you publish under a pseudonym. A per-repo
+    `gh-commit-author-guard.py`), and the piece I'd least want to run without if
+    you publish under a pseudonym. A per-repo
     identity tag (`git config claude.identity <id>`) is validated against a
     single identity map (`github-identity-map.example.json`) before any
     push/repo-create/commit: wrong SSH host alias, wrong gh account, wrong
@@ -120,7 +137,7 @@ Read `CLAUDE.md` itself; it's annotated. The placeholder convention is at the to
     pure-validator (no side effects), accident-prevention threat model.
     Static parsing won't stop a determined adversary, but it reliably
     catches the realistic accident class in testing. Ships with a self-contained
-    61-case behavioral suite (`test-gh-identity-hooks.py`). Behavioral tests
+    behavioral identity suite (`test-gh-identity-hooks.py`). Behavioral tests
     matter for guards, because a guard broken by a stray refactor fails OPEN
     and looks identical to a working one.
   - `angel-multiball-guard.py` — enforces the review-battery floor (single-pass
@@ -128,6 +145,11 @@ Read `CLAUDE.md` itself; it's annotated. The placeholder convention is at the to
   - `post-edit-secret-scan.py` — scans every edit for leaked keys.
   - `post-edit-stub-check.py` — flags TODO/FIXME/unimplemented left behind.
   - `pre-web-rfip.py` — a prompt-injection defense before web fetches.
+  - `ctx-nudge.sh` — nags once per tier as the driver's cached context grows,
+    with a per-turn cost estimate, and goes quiet after `/clear`.
+  - `log-model-tier.py` — an audit log of premium-model and tier-tagged subagent
+    dispatches. It records the model that ran, because the tag doesn't prove it,
+    and it can't see driver-level spend; both limits are stated in its header.
   - `sanitize-permission-allowlist.py`, `auto-kickoff.sh`, session telemetry, and
     optional infra hooks (serve-to-workstation, email guards) that degrade
     gracefully if you don't use them.
@@ -157,10 +179,8 @@ a session with `/kickoff`.
 
 ## On portability
 
-I genuinely don't know how much of this transfers. The people I've handed it to
-get *some* use out of it, but I can't tell whether they get as much as I do, more,
-or less. A lot of it is shaped to one person's brain and one person's failure
-modes. Take it as a worked example to strip for parts, not a
+I genuinely don't know how much of this transfers. A lot of it is shaped to one
+person's brain and one person's failure modes. Take it as a worked example to strip for parts, not a
 framework to adopt whole. The parts I'd bet travel best: the memory system, the
 evidence-tier rule, and NineAngel. The rest, your mileage will vary.
 
