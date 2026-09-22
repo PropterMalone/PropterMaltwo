@@ -32,7 +32,7 @@ memory dir actually auto-loads on your install before relying on it; if it
 doesn't, the convention still works with a manually-created memory dir and
 explicit reads at session start.
 
-## 2. The convention: an index + typed memory files
+## 2. The convention: a two-tier index + typed memory files
 
 ### `MEMORY.md` is an index, not a store
 
@@ -45,8 +45,56 @@ bootstrap (see install notes). Two tables carry most of it:
 - **Topic Index** — cross-cutting concerns (feedback rules, calibration,
   decisions, lessons, patterns) → the file that holds each.
 
-Entries are `- [Title](file.md) — one-line hook`. Keep it under ~200 lines; the
-tail gets truncated when auto-loaded.
+Entries are `- [Title](file.md) — one-line hook`.
+
+### Why one index stopped working, and the hot/cold split that replaced it
+
+The auto-loaded index is **capped**: past a documented line/byte ceiling the tail
+is simply dropped, silently and losslessly-for-the-loader. (Check your install's
+current limit rather than trusting a number here; the mechanism is what matters,
+not the constant.) One index holding every project and every topic grows past
+that ceiling the moment the portfolio does — a few dozen projects and a topic
+list in the hundreds is enough. The failure is the bad kind: nothing errors, the
+index just stops including its last rows, and the session opens believing it read
+everything.
+
+Worse, the recurring fix was manual. Every retro included a "fold something down"
+step to get back under the cap, which is maintenance the system created for
+itself.
+
+So the index splits into **two tiers**:
+
+| Tier | File | Loaded | Holds |
+|------|------|--------|-------|
+| **Hot** | `MEMORY.md` | Automatically, every session | Only **active** projects (in flight now) and a **curated allowlist** of high-use topics. Terse: one line each. |
+| **Cold** | `roster.md` | On demand | The **complete** project roster, every state — active, shipped, deployed-stable, on hold, abandoned. One line each. |
+| **Cold** | `topics.md` | On demand | The **complete** topic index — every topic file, with a pointer. |
+
+The hot tier is a *working set*, not a catalogue. Target it well under the cap
+(a third of it is a comfortable bar) and let the cold files be unbounded. A
+project leaving the hot tier isn't deleted; it moves to `roster.md`, which is
+where the session goes looking when it needs something not in front of it.
+
+Two rules keep the split from rotting:
+
+1. **The cold tier is a known file path, not a hope.** The point is that a
+   session can *open* `roster.md` when it needs the full list. Don't rely on the
+   model spontaneously recalling that a file exists — the skills that need it
+   name it explicitly in their own instructions.
+2. **Promotion and demotion happen at `/retro`, on a stated rule.** Hot = worked
+   on recently, or strategically central right now. Everything else is cold.
+   Without a review step the hot tier silently regrows and you're back at the cap.
+
+An **active/dormant rule** worth copying: hot if it's had commits in the last
+three weeks *or* it's strategically central, minus anything shipped,
+deployed-stable, on-hold, not-started, or abandoned. Cap the topic allowlist too
+(~15, add-one-remove-one), for the same reason.
+
+Deriving these files automatically from per-project cards is the obvious next
+step and mostly a trap at small scale: the migration (authoring a card in every
+project file) is the real work, and a generator that emits a stub-only index is
+worse than the hand-maintained one. Hand-edit both tiers until hand-editing
+measurably hurts.
 
 ### Each memory is its own file with frontmatter
 
@@ -86,9 +134,13 @@ time. Verify a recalled fact against current reality before acting on it.
 
 Three skills (in `skills/`) operate the system:
 
-- **`/kickoff`** — session start. Reads `MEMORY.md`, recent handoffs, surfaces
-  background work and flags (retro due, blockers), states understanding, asks the
-  agenda. Turns a cold start into an oriented one.
+- **`/kickoff`** — session start. Reads the hot `MEMORY.md` plus recent handoffs,
+  surfaces background work and flags (retro due, blockers), states understanding,
+  asks the agenda. Turns a cold start into an oriented one. It names `roster.md`
+  and `topics.md` as the on-demand portfolio and topic indexes, and opens them
+  only when the agenda needs something the hot tier doesn't carry — that pointer
+  has to be explicit, because kickoff is otherwise instructed not to go reading
+  extra files.
 - **`/wrap`** — session end. Updates the calibration log, writes/updates memory
   for what changed, writes a dated `handoff_YYYY-MM-DD.md` so the next session
   picks up mid-stream, scans commits for decision-record candidates.
@@ -111,6 +163,9 @@ Files these rituals maintain, alongside the typed memories:
 1. Make sure your memory dir exists (Claude Code creates the per-project one on
    first use; for the central home-session dir you can create it yourself).
 2. Copy `templates/MEMORY.md` into it and start filling the two index tables.
+   That's the hot tier. Create empty `roster.md` and `topics.md` beside it; they
+   stay empty until the hot tier has something to demote, which is the right
+   time to start them.
 3. Run `/kickoff` at the start of sessions and `/wrap` at the end. The memory
    builds itself from there.
 

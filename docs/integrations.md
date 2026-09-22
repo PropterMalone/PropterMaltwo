@@ -17,12 +17,12 @@ vague "you could integrate email here."
 | `gmail` | A Gmail/Google Workspace CLI + your Google account. The reference setup uses a `gws`-style CLI wrapped by a local `~/bin/<your-email-cli>` script. | Create email **drafts** (never auto-send), with a mandatory sanitizer and a clobber-guard that refuses to overwrite a draft you hand-edited. |
 | `push` | An SSH-reachable workstation with a browser + a small `serve-to-workstation.sh`. | Serve a local file (HTML/PDF/image) over HTTP through an SSH tunnel so you can view it in your workstation's browser. |
 | `dashboard` | Google Tasks (via the `gws` CLI) + a local `backlog.md`. | Merge your task manager and a local backlog into one prioritized view. Formerly Todoist-backed; the backend swap was a one-skill edit. |
-| `docket` | A planner CLI + a queue tool + calendar access (the reference setup uses bespoke `docket` + `phyllis` CLIs). | A time-aware daily plan that coordinates your day with the agent's background work. |
+| `docket` | A planner CLI + a queue tool + calendar access. | A time-aware daily plan that coordinates your day with the agent's background work. |
 
-`docket` and parts of `dashboard`/`status` lean on two bespoke tools that are
-**not** in this repo: a queue (`phyllis`) and a planner (`docket`). Treat those
-skills as blueprints: the choreography is real, the specific CLI calls are
-placeholders. Swap your own tools in or delete the steps.
+`docket` and parts of `dashboard`/`status` lean on external planner and queue
+tools that are **not** in this repo. Treat those skills as blueprints: the
+choreography is real, the specific CLI calls are placeholders. Swap your own
+tools in or delete the steps.
 
 ## Wiring pattern: the email draft seam (worked example)
 
@@ -31,8 +31,13 @@ rule (see CLAUDE.md → Outbound Messages):
 
 1. Install a Google Workspace CLI (a `gws`-style tool) and authenticate it.
 2. Write a thin wrapper script (the reference calls it `~/bin/gmail`) that:
-   - builds the message as `text/plain`, one long line per paragraph (no manual
-     wraps break copy-paste of URLs/commands);
+   - builds the message as **`multipart/alternative`** (a `text/plain` part plus a
+     `text/html` part), one long line per paragraph, with any command, path, or URL
+     on a line of its own. Never pre-wrap prose by hand. Bare plain text and
+     generated plain-text fallbacks may wrap and split commands, while the tested
+     rich-text path preserves line structure. Keep a `--plain` flag for lists that
+     require single-part plain text. `format=flowed` is unsafe for anything you'll
+     open in a compose window.
    - runs a **sanitizer** before any create/send;
    - records what it wrote so a later delete/update can detect that you edited
      the draft in the web UI and **refuse** to clobber it.
@@ -43,6 +48,28 @@ rule (see CLAUDE.md → Outbound Messages):
 
 Multi-account? Switch with an env var pointing at a per-account config dir, e.g.
 `GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.config/gws-<account>`.
+
+## Wiring pattern: notification and task-tracker hook points
+
+The unattended scripts in `scripts/` never hardcode a notifier or a task manager.
+Each one takes a command you supply, and treats a missing or broken hook as a
+skip rather than a failure — a sweep that fails because your notifier moved is a
+sweep you stop trusting.
+
+| Script | Env var | Called with | When |
+|--------|---------|-------------|------|
+| `adr-sweep.py` | `ADR_SWEEP_NOTIFY` | `(title, body)` | Once per run, only if something new fired |
+| `adr-sweep.py` | `ADR_SWEEP_TASK` | `(title, notes)` | Once per **new** fire or hard support loss |
+| `monthly-lint-dead-sweep.sh` | `NOTIFY_CMD` | `(title, body)` | Only when a project fails the dead-code gate |
+
+Anything that takes two positional arguments works: a one-line `curl` to a push
+service, a `mail` invocation, a CLI that adds to your task manager. Write it once
+as a small script on `PATH` and point all three at it — one place owns the
+channel, and you can silence everything by moving one file.
+
+`scripts/adr-sweep.py` documents its full configuration surface (root dirs, log
+path, memory root, decisions subdir) in its module docstring; see
+[`decision-records.md`](decision-records.md) for what it's doing and why.
 
 ## Secrets: keep them out of the repo and out of the model's context
 

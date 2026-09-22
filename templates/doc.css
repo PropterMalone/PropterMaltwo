@@ -1,0 +1,78 @@
+/* House document stylesheet — used by ~/.claude/scripts/md2html.sh.
+   Light/dark aware, print-clean, responsive tables. Edit here, not per-document:
+   one stylesheet is the whole point (see the header comment in md2html.sh).
+
+   Passing this via --css also suppresses pandoc's built-in default CSS, which is
+   why md2html.sh passes it as --css rather than --include-in-header.
+
+   All fonts are system stacks — nothing is fetched from a network. Keep it that
+   way: a rendered doc should open correctly offline and leak no request to a
+   font host when someone else opens it. */
+:root{
+  --bg:#fbfaf8; --fg:#1a1a1a; --muted:#5f5b56; --rule:#e0dcd6;
+  --accent:#8a4b2a; --accent2:#2a5d8a; --card:#fff; --code:#f2efea;
+  --ok:#2d6a4f; --warn:#8a6d1f; --bad:#9b2c2c;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#16181c; --fg:#e6e3de; --muted:#9a958d; --rule:#2c3038;
+    --accent:#d9884f; --accent2:#7fb3e0; --card:#1c1f24; --code:#22262c;
+    --ok:#74c69d; --warn:#d9c078; --bad:#e88;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16181c; --fg:#e6e3de; --muted:#9a958d; --rule:#2c3038;
+  --accent:#d9884f; --accent2:#7fb3e0; --card:#1c1f24; --code:#22262c;
+  --ok:#74c69d; --warn:#d9c078; --bad:#e88;
+}
+:root[data-theme="light"]{
+  --bg:#fbfaf8; --fg:#1a1a1a; --muted:#5f5b56; --rule:#e0dcd6;
+  --accent:#8a4b2a; --accent2:#2a5d8a; --card:#fff; --code:#f2efea;
+  --ok:#2d6a4f; --warn:#8a6d1f; --bad:#9b2c2c;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0 auto; max-width:64rem; background:var(--bg); color:var(--fg);
+  font:16px/1.62 Charter, Georgia, "Iowan Old Style", serif;
+  padding:2.5rem 1.25rem 6rem;
+}
+header#title-block-header{border-bottom:2px solid var(--fg); padding-bottom:1rem; margin-bottom:2rem}
+h1.title{font-size:1.85rem; line-height:1.2; margin:0; letter-spacing:-.01em}
+p.subtitle,p.date{color:var(--muted); font-size:.95rem; margin:.35rem 0 0}
+h1{font-size:1.75rem; line-height:1.25; margin:2.2rem 0 .6rem; letter-spacing:-.01em}
+h2{font-size:1.28rem; margin:2.6rem 0 .85rem; padding-top:1.1rem;
+   border-top:1px solid var(--rule); letter-spacing:-.01em}
+h3{font-size:1.05rem; margin:1.7rem 0 .5rem; color:var(--accent)}
+h4{font-size:.95rem; margin:1.3rem 0 .4rem; color:var(--muted);
+   text-transform:uppercase; letter-spacing:.06em; font-family:system-ui,sans-serif}
+p{margin:.75rem 0}
+ul,ol{margin:.7rem 0; padding-left:1.35rem}
+li{margin:.42rem 0}
+li>p{margin:.3rem 0}
+code{font:0.86em/1.4 ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+     background:var(--code); padding:.12em .38em; border-radius:3px}
+pre{background:var(--code); padding:.9rem 1rem; border-radius:5px; overflow-x:auto;
+    border:1px solid var(--rule)}
+pre code{background:none; padding:0; font-size:.82rem; line-height:1.5}
+a{color:var(--accent2)}
+strong{font-weight:650}
+hr{border:none; border-top:1px solid var(--rule); margin:2rem 0}
+/* Responsive tables: the table itself becomes the scroll container. */
+table{border-collapse:collapse; width:100%; margin:1.1rem 0;
+      font:14px/1.45 system-ui,-apple-system,sans-serif;
+      display:block; overflow-x:auto; max-width:100%;
+      border:1px solid var(--rule); border-radius:5px}
+th,td{padding:.52rem .7rem; text-align:left; border-bottom:1px solid var(--rule);
+      vertical-align:top}
+thead th{background:var(--code); font-weight:640; font-size:13px; white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+blockquote{margin:1.1rem 0; padding:.15rem 0 .15rem 1rem;
+           border-left:3px solid var(--accent); color:var(--muted)}
+blockquote p:first-child{margin-top:0} blockquote p:last-child{margin-bottom:0}
+img{max-width:100%; height:auto}
+@media print{
+  body{background:#fff;color:#000;padding:0;max-width:none}
+  table{overflow:visible;display:table}
+  h2,h3{page-break-after:avoid}
+}
