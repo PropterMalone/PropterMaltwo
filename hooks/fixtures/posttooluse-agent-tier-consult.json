@@ -1,0 +1,1 @@
+{"session_id":"test-tier-00000000-0000-0000-0000-000000000009","cwd":"/tmp/example-project","tool_name":"Agent","tool_input":{"description":"[tier-consult] verify the migration proof","model":"fable","prompt":"Bounded hard question: is this join lossless?"}}

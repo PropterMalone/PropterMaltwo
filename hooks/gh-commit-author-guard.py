@@ -308,12 +308,19 @@ def _check_commit(commit: dict, cwd: str, identities: dict) -> str | None:
                 f'<{want_email}>") or drop the flag.'
             )
 
-    if have_name == want_name and have_email == want_email:
+    # An identity may hold more than one address for the same person — e.g. a
+    # rebrand where the old domain stays a live alias. Those are the same identity,
+    # so any of them authenticates; only the canonical is suggested in the fix hint.
+    ok_emails = {want_email, *(entry.get("email_aliases") or [])}
+
+    if have_name == want_name and have_email in ok_emails:
         return None  # match -> allow
 
+    alt = sorted(ok_emails - {want_email})
+    also = f" (or {', '.join(repr(e) for e in alt)})" if alt else ""
     return (
         f"Commit author mismatch. Repo tagged {tag!r} expects "
-        f"user.name={want_name!r} / user.email={want_email!r}, but this "
+        f"user.name={want_name!r} / user.email={want_email!r}{also}, but this "
         f"commit would use user.name={have_name or '(unset)'!r} / "
         f"user.email={have_email or '(unset)'!r}. Fix before committing:\n"
         f'  git -C {top} config user.name "{want_name}" && '

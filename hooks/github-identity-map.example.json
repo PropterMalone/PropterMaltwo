@@ -15,9 +15,10 @@
       "ssh_host": "github.com-personal",
       "user_name": "Pat Personal",
       "user_email": "pat@personal.example",
+      "email_aliases": ["pat.personal@old-domain.example"],
       "push": true,
       "retired": false,
-      "note": "Real-name account for private/employer work."
+      "note": "Real-name account for private/employer work. email_aliases is optional — list any other addresses that authenticate as this same identity (e.g. an old domain that still forwards), so a commit under either address is accepted; the canonical user_email is still what gets suggested as the fix."
     },
     "local-only": {
       "push": false,

@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """PreToolUse hook (Skill, Agent): enforce that /angel runs MULTIBALL (N>=2).
 
-the user's standing rule (2026-06): never drop /angel to single-pass. Claude
-rationalizes single-pass as "cost-sensible for a small/focused diff," it recurs
-across projects and contexts, and when challenged Claude capitulates without
-fixing the driver. The cost<->recall tradeoff is the user's to make, not Claude's to
-silently optimize away: a single pass catches only ~40% of a persona's Important+
-findings; the 2nd independent pass is the recall recovery. Memory notes don't
-hold this (proven) -- so this hook binds it at the tool boundary instead.
+A requested multi-pass review must not silently become a single pass. Independent
+later passes materially improve recall and have added new correctness, evidence,
+chronology, and ownership checks. Resource tradeoffs must be surfaced to the user
+rather than silently resolved by reducing the pass count, so this hook binds the
+invariant at the tool boundary.
 
 Two enforcement points:
 - Skill(angel) carrying a single-pass flag (--single / --no-multiball /
@@ -35,6 +33,13 @@ BALLS_ONE = re.compile(
 
 DEBOUNCE_FILE = "/tmp/.angel-multiball-reminder"
 DEBOUNCE_SEC = 600
+
+# Reinforce the requested multi-pass invariant at hand-rolled dispatch points.
+REMINDER = """[angel multiball guard] Hand-rolled angel battery detected. Dispatch EACH persona >=2 independent times (N=2; N=3 on --full/--all).
+
+Independent later passes materially improve recall and have added new correctness, evidence, chronology, and ownership checks. Cross-persona breadth does not replace repeated sampling within a persona.
+
+Do not silently turn a requested multi-pass review into one pass based on target size, focus, or lane count. If the resource cost is material, surface the tradeoff and let the user choose rather than quietly reducing N. Prefer routing /angel through the Skill tool when the scope fits."""
 
 
 def deny(reason: str) -> int:
@@ -79,13 +84,13 @@ def main() -> int:
         is_angel = skill == "angel" or skill.endswith(":angel")
         if is_angel and (SINGLE_FLAGS.search(args) or BALLS_ONE.search(args)):
             return deny(
-                "Blocked: /angel must run multiball (N>=2). the user's standing rule "
-                "(2026-06): never drop angel to single-pass -- the cost<->recall "
-                "tradeoff is his, not yours to optimize away, and a 2nd pass "
-                "reliably finds real bugs the 1st misses. Remove "
+                "Blocked: /angel must run multiball (N>=2). Independent later "
+                "passes materially improve recall and have added new correctness, "
+                "evidence, chronology, and ownership checks. Remove "
                 "--single/--no-multiball/--multiball=1/--balls 1 and let the skill "
-                "default to N=2 (N=3 on --full/--all). If cost is a real concern, "
-                "surface it and let the user decide -- do not silently single-pass."
+                "default to N=2 (N=3 on --full/--all). If resources are constrained, "
+                "surface the tradeoff and let the user decide -- do not silently "
+                "turn a requested multi-pass review into one pass."
             )
         return 0
 
@@ -103,15 +108,7 @@ def main() -> int:
                         pass
                 except OSError:
                     pass
-                return inject(
-                    "[angel multiball guard] You are hand-rolling the angel battery "
-                    "via Agent dispatches. the user's STANDING RULE: this must be "
-                    "MULTIBALL -- dispatch EACH persona >=2 independent times (N=2; "
-                    "N=3 for full/all reviews). Do NOT single-pass it, even for a "
-                    "'small' or 'focused' target -- that is the exact rationalization "
-                    "the user has flagged as a recurring failure. Prefer routing /angel "
-                    "through the Skill tool when the scope fits."
-                )
+                return inject(REMINDER)
         return 0
 
     return 0

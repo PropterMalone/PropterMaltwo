@@ -5,6 +5,22 @@
 # tracking. Both the ccusage cache and the ~/.phyllis state dir are OPTIONAL —
 # the snapshot block below no-ops cleanly when they're absent.
 
+# Headless `claude -p` drivers (cron batches, unattended scripts) set
+# CLAUDE_HEADLESS=1: each -p call is a fresh session, so without this gate
+# every batch call got told to run /kickoff and left a snapshot behind — a
+# silent token/latency tax on hundreds of calls.
+if [ -n "${CLAUDE_HEADLESS:-}" ]; then
+  exit 0
+fi
+# Belt for callers that never set it: `claude -p` exports
+# CLAUDE_CODE_ENTRYPOINT=sdk-cli into its own env, and hooks inherit it. Any
+# cron caller without the opt-out above would pay a full /kickoff per call;
+# gating those calls yields substantial latency and cost savings. Interactive
+# sessions report entrypoint "cli".
+case "${CLAUDE_CODE_ENTRYPOINT:-}" in
+  sdk-cli|sdk-ts|sdk-py) exit 0 ;;
+esac
+
 # Source shared utils for hook_phyllis_state_dir() and hook_log().
 # Falls back to hardcoded paths if the lib is missing (defense in depth).
 HOOK_LIB="$(dirname "${BASH_SOURCE[0]}")/lib/hook-utils.sh"

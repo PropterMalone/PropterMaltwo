@@ -165,6 +165,27 @@ assert_stub_clean_silent() {
   return 0
 }
 
+assert_model_tier_logged_consult() {
+  # log-model-tier.py must append exactly one JSONL line tagged tier=consult
+  # to the TEST log (never the real ~/.claude/state one).
+  local log="$HOOK_TEST_STATE_DIR/model-tier-log.jsonl"
+  [ -f "$log" ] || return 1
+  grep -q '"tier": *"consult"' "$log" || return 1
+  [ "$(grep -c . "$log")" = "1" ] || return 1
+  # And it must not have touched the real log.
+  return 0
+}
+
+assert_model_tier_noop() {
+  # A non-premium Agent dispatch with no doctrine tag must log NOTHING and
+  # stay silent.
+  local log="$HOOK_TEST_STATE_DIR/model-tier-log.jsonl"
+  [ -s "$1" ] && return 1
+  # Still exactly the one line from the consult case — no new row.
+  [ -f "$log" ] && [ "$(grep -c . "$log")" != "1" ] && return 1
+  return 0
+}
+
 assert_secret_scan_flags() {
   # Secret-laden Edit: stub-check + secret-scan both fire. Secret-scan
   # should mention "Secret patterns" or "CRITICAL".
@@ -325,6 +346,20 @@ fire_hook "auto-kickoff.sh / existing session" \
   "userpromptsubmit-existing-session.json" \
   assert_kickoff_sentinel_existing
 
+# 2b. UserPromptSubmit (headless) — a fresh session id, but the env says
+# `claude -p` (CLAUDE_CODE_ENTRYPOINT=sdk-cli): the hook must stay silent and
+# leave no sentinel, without any caller setting CLAUDE_HEADLESS. Regression
+# guard for the per-call /kickoff tax the headless gate exists to avoid.
+assert_kickoff_headless_silent() {
+  [ -s "$1" ] && return 1
+  [ -f "$HOOK_TEST_STATE_DIR/kickoff-sentinels/claude-kickoff-test-headless-00000000-0000-0000-0000-000000000003" ] && return 1
+  return 0
+}
+fire_hook "auto-kickoff.sh / headless (sdk-cli entrypoint)" \
+  "CLAUDE_CODE_ENTRYPOINT=sdk-cli bash $HOOKS_DIR/auto-kickoff.sh" \
+  "userpromptsubmit-headless-session.json" \
+  assert_kickoff_headless_silent
+
 # 3. PostToolUse Edit, clean
 fire_hook "post-edit-stub-check.py / clean" \
   "python3 $HOOKS_DIR/post-edit-stub-check.py" \
@@ -341,6 +376,19 @@ fire_hook "post-edit-secret-scan.py / secret" \
   "python3 $HOOKS_DIR/post-edit-secret-scan.py" \
   "posttooluse-edit-secret.json" \
   assert_secret_scan_flags
+
+# 4a2. PostToolUse Agent — premium-tier doctrine logging (the /retro-style
+# observable this hook exists for). Order matters: the consult case must run
+# before the no-op case, which asserts the log did NOT grow.
+fire_hook "log-model-tier.py / logs consult tag" \
+  "python3 $HOOKS_DIR/log-model-tier.py" \
+  "posttooluse-agent-tier-consult.json" \
+  assert_model_tier_logged_consult
+
+fire_hook "log-model-tier.py / no-op on untagged non-premium" \
+  "python3 $HOOKS_DIR/log-model-tier.py" \
+  "posttooluse-agent-notier-noop.json" \
+  assert_model_tier_noop
 
 # 4b. PostToolUse Edit, secret — output-shape check (hookSpecificOutput envelope)
 fire_hook "post-edit-secret-scan.py / output shape" \
@@ -436,6 +484,54 @@ fire_hook "angel-multiball-guard.py / allow (multiball default)" \
   "python3 $HOOKS_DIR/angel-multiball-guard.py" \
   "pretooluse-skill-angel-multiball.json" \
   assert_allow_silent
+
+# 14. ctx-nudge.sh — UserPromptSubmit context-cost nudge. Fires only on an
+#     UPWARD tier crossing, so the two cases that matter are "below T1 stays
+#     silent" and "above T1 with no prior state nudges once".
+#     Fixtures are GENERATED here, not stored: the hook reads a transcript by
+#     ABSOLUTE path, and that path is the per-run sandbox. A checked-in fixture
+#     would carry a stale path and the hook would exit 0 at its
+#     transcript-missing guard — passing while testing nothing.
+CTX_TRANSCRIPT="$TEST_DIR/ctx-nudge-transcript.jsonl"
+printf '%s\n' '{"type":"assistant","message":{"usage":{"cache_read_input_tokens":612345}}}' > "$CTX_TRANSCRIPT"
+CTX_TRANSCRIPT_LOW="$TEST_DIR/ctx-nudge-transcript-low.jsonl"
+printf '%s\n' '{"type":"assistant","message":{"usage":{"cache_read_input_tokens":1200}}}' > "$CTX_TRANSCRIPT_LOW"
+
+CTX_FIXTURES=()
+for pair in "ctx-nudge-above-t2:$CTX_TRANSCRIPT:ctxsid-above" \
+            "ctx-nudge-below-t1:$CTX_TRANSCRIPT_LOW:ctxsid-below"; do
+  fx="${pair%%:*}"; rest="${pair#*:}"; tp="${rest%%:*}"; sid="${rest##*:}"
+  printf '{"session_id":"%s","transcript_path":"%s","cwd":"%s"}\n' \
+    "$sid" "$tp" "$TEST_DIR" > "$FIXTURES_DIR/$fx.json"
+  CTX_FIXTURES+=("$FIXTURES_DIR/$fx.json")
+done
+
+assert_ctx_nudge_fired() {
+  # Tier 2 (612k >= 500k) from a cold state file must produce a nudge on stdout
+  # and record the tier in the SANDBOX state dir, never in ~/.claude/state.
+  grep -q 'Context 612k/turn' "$1" || { printf '    (no nudge on stdout)\n'; return 1; }
+  local sf="$HOOK_TEST_STATE_DIR/claude-state/ctx-nudge-ctxsid-above.json"
+  [ -f "$sf" ] || { printf '    (no sandbox state file at %s)\n' "$sf"; return 1; }
+  grep -q '"tier":2' "$sf" || { printf '    (tier not 2 in state)\n'; return 1; }
+  [ -f "$HOME/.claude/state/ctx-nudge-ctxsid-above.json" ] && {
+    printf '    (LEAKED production state — hook ignored HOOK_TEST_STATE_DIR)\n'; return 1; }
+  return 0
+}
+assert_ctx_nudge_silent() {
+  [ -s "$1" ] && { printf '    (nudged below T1)\n'; return 1; }
+  return 0
+}
+
+fire_hook "ctx-nudge.sh / nudges above T2" \
+  "bash $HOOKS_DIR/ctx-nudge.sh" \
+  "ctx-nudge-above-t2.json" \
+  assert_ctx_nudge_fired
+fire_hook "ctx-nudge.sh / silent below T1" \
+  "bash $HOOKS_DIR/ctx-nudge.sh" \
+  "ctx-nudge-below-t1.json" \
+  assert_ctx_nudge_silent
+
+rm -f "${CTX_FIXTURES[@]}"
 
 printf '%s\n' "----"
 printf 'pass=%d fail=%d\n' "$PASS" "$FAIL"

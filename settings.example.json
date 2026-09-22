@@ -47,6 +47,15 @@
             "timeout": 2
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/ctx-nudge.sh",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -72,6 +81,16 @@
             "type": "command",
             "command": "bash $HOME/.claude/hooks/post-write-serve.sh",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/log-model-tier.py",
+            "timeout": 3
           }
         ]
       }
@@ -161,5 +180,6 @@
     "type": "command",
     "command": "bash $HOME/.claude/statusline-command.sh"
   },
-  "effortLevel": "high"
+  "effortLevel": "high",
+  "switchModelsOnFlag": false
 }

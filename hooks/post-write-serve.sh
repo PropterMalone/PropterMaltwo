@@ -29,9 +29,17 @@ case "$FILE_PATH" in
     fi
     # Degrade gracefully: if the serve script isn't installed, do nothing.
     [ -f "$SERVE_SCRIPT" ] || exit 0
-    URL="$("$SERVE_SCRIPT" "$FILE_PATH" 2>/dev/null)"
+    # Auto-serve is a convenience, never a gate: a failure here must not fail
+    # the Write that triggered it. Capture stderr rather than discarding it —
+    # swallowing it produces "blocking error, no stderr output", which hides
+    # the actual cause (e.g. a path outside the serve script's allowed roots).
+    SERVE_ERR="$(mktemp)"
+    URL="$("$SERVE_SCRIPT" "$FILE_PATH" 2>"$SERVE_ERR" || true)"
     if [ -n "$URL" ]; then
       echo "Served to workstation: $URL"
+    elif [ -s "$SERVE_ERR" ]; then
+      echo "Auto-serve skipped: $(head -1 "$SERVE_ERR")"
     fi
+    rm -f "$SERVE_ERR"
     ;;
 esac
