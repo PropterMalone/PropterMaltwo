@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # pattern: functional core
 """Canonicalize persona keys across run history — shared by mine-runs.py and
-recurrence-pilot.py (extracted 2026-06-12; the two copies had already diverged).
+recurrence-pilot.py to prevent duplicate implementations from diverging.
 
 Personas log under inconsistent keys: the file stem (`adversarial`,
 `thousand-foot`, `future-me`) and the short frontmatter name (`adv`,

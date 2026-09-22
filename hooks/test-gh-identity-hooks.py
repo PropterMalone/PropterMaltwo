@@ -3,11 +3,10 @@
 
 Fires each hook as a subprocess with realistic PreToolUse JSON on stdin against
 temp git repos, asserting allow (empty stdout) or deny (hookSpecificOutput
-JSON with permissionDecision=deny). Covers the a 2026-06 /angel must-fix list
-(identity-hook-angel-findings.md) case by case.
+JSON with permissionDecision=deny) across the guarded command cases.
 
-Uses the REAL identity map (~/.claude/github-identity-map.json) — identity ids
-PropterMalone / your-personal-account / RetiredAccount / local-only are load-bearing contract.
+Uses an isolated fixture identity map. Its fixture IDs are load-bearing test
+contract values only.
 
 Run: python3 ~/.claude/hooks/test-gh-identity-hooks.py
 Exit 0 all pass, 1 any fail.
@@ -107,10 +106,12 @@ with tempfile.TemporaryDirectory(prefix="gh-identity-test-") as TMP:
                 "push": True, "retired": False},
             "your-personal-account": {"gh_account": "your-personal-account",
                 "ssh_host": "github.com-personal", "user_name": "Pat Personal",
-                "user_email": "pat@personal.example", "push": True, "retired": False},
-            "RetiredAccount": {"gh_account": "RetiredAccount",
-                "ssh_host": "github.com-retiredaccount", "user_name": "RetiredAccount",
-                "user_email": "retired@personal.example", "push": True, "retired": True},
+                "user_email": "pat@personal.example",
+                "email_aliases": ["pat.old@personal.example"],
+                "push": True, "retired": False},
+            "BlockedAccount": {"gh_account": "BlockedAccount",
+                "ssh_host": "github.com-blockedaccount", "user_name": "BlockedAccount",
+                "user_email": "blocked@personal.example", "push": True, "retired": True},
             "local-only": {"push": False, "retired": False},
         }}, f)
 
@@ -121,10 +122,13 @@ with tempfile.TemporaryDirectory(prefix="gh-identity-test-") as TMP:
                       "Pat Personal", "pat@personal.example")
     pat_wrong_host = make_repo(TMP, "pat-wrong", "your-personal-account", "git@github.com:your-personal-account/y.git")
     localonly = make_repo(TMP, "localonly", "local-only", "git@github.com:PropterMalone/z.git")
-    retired = make_repo(TMP, "retired", "RetiredAccount", "git@github.com-retiredaccount:RetiredAccount/w.git")
+    blocked = make_repo(TMP, "blocked", "BlockedAccount", "git@github.com-blockedaccount:BlockedAccount/w.git")
     pat_badauthor = make_repo(TMP, "pat-badauthor", "your-personal-account",
                              "git@github.com-personal:your-personal-account/y.git",
                              "PropterMalone", "proptermalone@users.noreply.github.com")
+    pat_alias = make_repo(TMP, "pat-alias", "your-personal-account",
+                         "git@github.com-personal:your-personal-account/y.git",
+                         "Pat Personal", "pat.old@personal.example")
     notarepo = os.path.join(TMP, "plain")
     os.makedirs(notarepo)
 
@@ -136,7 +140,7 @@ with tempfile.TemporaryDirectory(prefix="gh-identity-test-") as TMP:
     check("deny: untagged repo", PUSH_HOOK, "git push", untagged, True, "not tagged")
     check("deny: wrong ssh host for tag", PUSH_HOOK, "git push origin main", pat_wrong_host, True, "mismatch")
     check("deny: local-only tag", PUSH_HOOK, "git push", localonly, True, "disabled by policy")
-    check("deny: retired RetiredAccount tag", PUSH_HOOK, "git push", retired, True, "RETIRED")
+    check("deny: policy-blocked account tag", PUSH_HOOK, "git push", blocked, True, "RETIRED")
     check("deny: push outside any repo", PUSH_HOOK, "git push", notarepo, True, "no git repository")
 
     # Must-fix #1: ALL push segments validated, not just the first
@@ -256,6 +260,10 @@ with tempfile.TemporaryDirectory(prefix="gh-identity-test-") as TMP:
           "git commit --author='Evil <evil@x.com>' -m 'x'", pat_ok, True, "mismatch")
     check("deny: --author=<pattern> can't be verified statically", COMMIT_HOOK,
           "git commit --author=whoknows -m 'x'", pat_ok, True, "pattern form")
+    check("allow: email_aliases — commit author matches the alias address", COMMIT_HOOK,
+          "git commit -m 'x'", pat_alias, False)
+    check("deny: alias-holding identity still rejects an unrelated email", COMMIT_HOOK,
+          "git -c user.email=someone-else@example.com commit -m 'x'", pat_alias, True, "mismatch")
     check("RE-I3 allow: --author=<own name> pattern resolves to identity", COMMIT_HOOK,
           "git commit --author='Pat Personal' -m 'x'", pat_ok, False)
     check("deny: env-wrapped commit, mismatch", COMMIT_HOOK,

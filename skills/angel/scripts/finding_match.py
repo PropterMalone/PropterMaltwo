@@ -10,8 +10,8 @@ No I/O. Two scripts share this matcher:
 
 Both questions reduce to "do these two finding records describe the same issue?"
 — same normalized file (or basename) AND title-token overlap above a threshold.
-Extracted from recurrence-pilot.py 2026-06-17 so the matcher has one definition
-and one set of tests instead of being duplicated per analyzer.
+Shared here so the matcher has one definition and one test surface rather than
+being duplicated by each analyzer.
 """
 import re
 
@@ -74,12 +74,30 @@ def recurs(f, others, threshold):
     return any(finding_match(f, g, threshold) for g in others)
 
 
+def extract_line(raw):
+    """First line number for a finding, or None. Prefers the explicit 'line'
+    field (int, '206', or a '206-293' range -> 206); falls back to a ':NNN'
+    suffix in the file/location string. Used by line-proximity matching."""
+    v = raw.get("line")
+    if isinstance(v, bool):  # bool is an int subclass — reject before the int check
+        v = None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, str):
+        m = re.match(r"\s*(\d+)", v)
+        if m:
+            return int(m.group(1))
+    fileval = raw.get("file") or raw.get("location") or ""
+    m = re.search(r":(\d+)", str(fileval))
+    return int(m.group(1)) if m else None
+
+
 def normalize_finding(raw):
-    """Raw snapshot finding dict -> matcher-ready dict (nfile/title/toks/sev).
+    """Raw snapshot finding dict -> matcher-ready dict (nfile/title/toks/sev/line).
 
     Accepts the snapshot 'findings' entry shape AND the within_persona_runs
-    per-pass entry shape (both carry file/title/severity; line is ignored — the
-    normalized file already drops the line suffix)."""
+    per-pass entry shape (both carry file/title/severity/line). `nfile` drops the
+    line suffix; `line` preserves the (start) line number for proximity matching."""
     raw_file = raw.get("file") or raw.get("location") or ""
     title = raw.get("title") or ""
     sev = (raw.get("severity") or "noted").lower()
@@ -90,4 +108,34 @@ def normalize_finding(raw):
         "title": title,
         "toks": title_tokens(title),
         "sev": sev,
+        "line": extract_line(raw),
     }
+
+
+# --- within_persona_runs shape predicates (shared by the subsample + overlap
+# analyzers). Pure: they only inspect structure, no I/O. ---
+
+def persona_passes_analyzable(raw_passes):
+    """True if one persona's raw_passes is a list-of-lists-of-finding-dicts.
+
+    Rejects legacy inline-mode failure shapes: bare id-ref strings
+    (`[["f1","f2"], ...]`) and prose-string passes (`["consensus...", ...]`).
+    Those carry no file/title/severity, so a non-dict pass finding means the
+    persona is unanalyzable — skip it rather than crash in normalize_finding.
+    Empty passes (`[[], []]`, a genuinely all-clean run) ARE analyzable."""
+    if not isinstance(raw_passes, list):
+        return False
+    for pf in raw_passes:
+        if not isinstance(pf, list) or not all(isinstance(f, dict) for f in pf):
+            return False
+    return True
+
+
+def wpr_is_analyzable(wpr):
+    """True if a within_persona_runs dict has the structured per-pass shape the
+    analyzers need across every persona. False for null/empty and for the broken
+    id-ref / prose shapes. Used to skip-and-report unanalyzable snapshots so one
+    bad snapshot can't crash a whole --runs-dir scan."""
+    if not isinstance(wpr, dict) or not wpr:
+        return False
+    return all(persona_passes_analyzable(p) for p in wpr.values())

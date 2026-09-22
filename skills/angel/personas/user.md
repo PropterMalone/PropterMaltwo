@@ -4,7 +4,7 @@ default: yes
 modes: [diff, full]
 experimental: false
 requires:
-  any_of: [ui_surface, public_api, cli_entry, readme]
+  any_of: [ui_surface, public_api, cli_entry]  # ADR-07 removed an overly broad signal; require a user-facing surface or explicit selection
 context:
   digest: no
   project_claude_md: no

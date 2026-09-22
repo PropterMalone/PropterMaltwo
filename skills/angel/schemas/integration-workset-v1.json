@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nineangel.dev/schemas/integration-workset-v1.json",
+  "title": "NineAngel bounded integration workset",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "run", "candidates", "candidate_edges", "noise_floor_discards", "pass_backends", "previous_cycle", "metrics"],
+  "properties": {
+    "version": {"const": 1},
+    "run": {"type": "object"},
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["id", "persona", "severity", "title", "description", "raw_source_ids", "support_passes", "severity_ceiling", "reconciliation_status"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^c_[a-z0-9_]+_[0-9]{3}$"},
+          "persona": {"type": "string", "minLength": 1},
+          "severity": {"enum": ["critical", "important", "minor", "noted"]},
+          "title": {"type": "string", "minLength": 1},
+          "effort": {"type": ["string", "null"], "enum": ["trivial", "moderate", "significant", null]},
+          "file": {"type": ["string", "null"]},
+          "line": {"type": ["string", "null"]},
+          "raw_source_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+          "support_passes": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+          "untrusted_content_flags": {"type": "array", "uniqueItems": true, "items": {"enum": ["override-directive", "role-directive", "authority-claim", "system-markup"]}},
+          "severity_ceiling": {
+            "type": "object",
+            "required": ["state", "value", "policy"],
+            "properties": {"state": {"enum": ["none", "detected", "unparsed"]}, "value": {"type": ["string", "null"]}, "policy": {"type": ["string", "null"]}}
+          }
+        }
+      }
+    },
+    "candidate_edges": {"type": "array"},
+    "advisory_matches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["left", "right", "score", "source", "prompt_version"],
+        "properties": {
+          "left": {"type": "string"},
+          "right": {"type": "string"},
+          "score": {"type": "number", "minimum": 0, "maximum": 1},
+          "source": {"const": "jev"},
+          "prompt_version": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "noise_floor_discards": {"type": "array"},
+    "pass_backends": {"type": "object"},
+    "previous_cycle": {"type": ["array", "null"]},
+    "metrics": {"type": "object"}
+  }
+}

@@ -7,8 +7,7 @@ Covers:
     while embedded in recurrence-pilot.py).
   - subsample-analyzer.py pure core (clustering + recall math), with hand-verified
     expected values.
-  - end-to-end on a synthetic within_persona_runs fixture (no real multiball data
-    exists yet — the 2026-06-07 window was aborted before producing any).
+  - end-to-end on a synthetic within_persona_runs fixture.
 
 Run: scripts/test_subsample.py   (exit 0 = all pass)
 """
@@ -149,8 +148,88 @@ def test_end_to_end():
     check(len(inst2) == 0, "e2e: persona with <2 passes is skipped")
 
 
+# ---- broken-shape resilience (the 2026-07 inline-mode id-ref snapshots) ----
+def test_broken_shape():
+    """A within_persona_runs that persisted reconciled finding-IDs as bare strings
+    (or prose) instead of structured per-pass finding dicts must be SKIPPED, not
+    crashed on. One such snapshot previously killed the whole --runs-dir scan
+    (AttributeError: 'str' object has no attribute 'get')."""
+    good = {"adv": [[{"severity": "critical", "file": "a.py", "title": "sql injection here"}],
+                    [{"severity": "critical", "file": "a.py", "title": "sql injection here"}]]}
+    idref = {"heir": [["f1", "f2", "f3"], ["f1", "f2", "f3"]]}      # bare id-strings (the crashing shape)
+    prose = {"x": ["consensus prose one", "consensus prose two"]}    # passes are strings, not lists
+    clean = {"naive": [[], []]}                                      # all-clean run: legit + analyzable
+
+    check(ss.wpr_is_analyzable(good), "broken: good structured shape is analyzable")
+    check(not ss.wpr_is_analyzable(idref), "broken: id-ref shape is NOT analyzable")
+    check(not ss.wpr_is_analyzable(prose), "broken: prose-string shape is NOT analyzable")
+    check(ss.wpr_is_analyzable(clean), "broken: all-clean [[],[]] IS analyzable")
+    check(not ss.wpr_is_analyzable({}), "broken: empty wpr is not analyzable")
+    check(not ss.wpr_is_analyzable(None), "broken: None wpr is not analyzable")
+
+    # analyze() must not crash on a broken snapshot and must drop it (0 instances).
+    inst, _, _ = ss.analyze([("broken", idref)], 0.5, "importantplus")
+    check(len(inst) == 0, "broken: id-ref snapshot yields 0 instances, no crash", f"got {inst}")
+    # A good snapshot alongside a broken one still analyzes — broken doesn't poison the batch.
+    inst2, _, _ = ss.analyze([("broken", idref), ("good", good)], 0.5, "importantplus")
+    check(len(inst2) == 1 and inst2[0]["persona"] == "adv",
+          "broken: good snapshot survives alongside a broken one", f"got {inst2}")
+
+
+import importlib.util as _ilu
+
+def _load_rp():
+    spec = _ilu.spec_from_file_location("recurrence_pilot", DIR / "recurrence-pilot.py")
+    mod = _ilu.module_from_spec(spec)
+    # recurrence-pilot imports persona_aliases + finding_match from its parent dir;
+    # sys.path already has DIR prepended at the top of this file.
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_recurrence_pilot_core():
+    """f14: ts_to_epoch must use real calendar math, not 31-day months."""
+    rp = _load_rp()
+
+    # Basic round-trip: known timestamps -> known epochs.
+    e_jan01 = rp.ts_to_epoch("20260101T000000Z")
+    e_jan02 = rp.ts_to_epoch("20260102T000000Z")
+    check(e_jan02 - e_jan01 == 86400, "ts_to_epoch: Jan 1→Jan 2 is exactly 86400s")
+
+    # June has 30 days. A 30-min gap crossing June30→July1 must be ~1800s, not ~88200s.
+    e_jun30 = rp.ts_to_epoch("20260630T235000Z")  # 23:50 on June 30
+    e_jul01 = rp.ts_to_epoch("20260701T000000Z")   # 00:00 on July 1
+    gap_s = e_jul01 - e_jun30
+    check(600 <= gap_s <= 700, "ts_to_epoch: June30 23:50 → July1 00:00 is ~600s, not ~88200s",
+          f"got {gap_s}s")
+
+    # Window edge: classify_pair uses gap_min; 10-min gap crossing June30→July1
+    # must be replicate if window_min >= 10 (same cal), temporal if window_min < 10.
+    # (The old 31-day-month formula inflated this to ~1450 min, always "temporal".)
+    a = {"ts_epoch": e_jun30, "cal": "baseline"}
+    b = {"ts_epoch": e_jul01, "cal": "baseline"}
+    result_narrow = rp.classify_pair(a, b, 5)    # window=5min < 10min real gap
+    result_wide   = rp.classify_pair(a, b, 90)   # window=90min > 10min real gap
+    check(result_narrow == "temporal",
+          "classify_pair: month-boundary gap outside window -> temporal",
+          f"got {result_narrow!r}")
+    check(result_wide == "replicate",
+          "classify_pair: month-boundary gap inside window, same cal -> replicate",
+          f"got {result_wide!r}")
+
+    # Same-day, same-cal, within window -> replicate (sanity check).
+    e_a = rp.ts_to_epoch("20260615T120000Z")
+    e_b = rp.ts_to_epoch("20260615T120500Z")  # 5 min later
+    a2 = {"ts_epoch": e_a, "cal": "baseline"}
+    b2 = {"ts_epoch": e_b, "cal": "baseline"}
+    check(rp.classify_pair(a2, b2, 90) == "replicate",
+          "classify_pair: intra-day 5-min same-cal gap -> replicate")
+
+
 test_matcher()
 test_core()
 test_end_to_end()
+test_broken_shape()
+test_recurrence_pilot_core()
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

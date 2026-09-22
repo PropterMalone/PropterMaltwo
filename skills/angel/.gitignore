@@ -1,5 +1,7 @@
 usage.log
+usage.log*
 outcomes.log
+outcomes.log*
 backlog.md
 __pycache__/
 *.pyc

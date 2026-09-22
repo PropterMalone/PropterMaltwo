@@ -1,6 +1,6 @@
 ---
 name: fresh
-default: yes
+default: opt-in  # ADR-07 demotion: weak marginal value in evaluation
 modes: [diff, full]
 experimental: false
 requires:

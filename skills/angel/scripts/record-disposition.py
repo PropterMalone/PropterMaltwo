@@ -32,6 +32,10 @@ def main():
 
     if disp not in VALID:
         sys.exit(f"invalid disposition '{disp}'; one of: {', '.join(sorted(VALID))}")
+    if fid == "experiment":
+        # reserved: emit-dispositions-skeleton.py stores the experiment-run
+        # flag as a top-level "experiment": true key in the same dict.
+        sys.exit("finding id 'experiment' is reserved (experiment-run marker key)")
     if not run_dir.is_dir():
         sys.exit(f"run dir not found: {run_dir}")
     # Refuse to write outside the runs root (path-traversal guard; override for tests).

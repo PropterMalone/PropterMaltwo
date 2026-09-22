@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nineangel.dev/schemas/findings-snapshot-v3.json",
+  "title": "NineAngel reducer-era findings snapshot",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["version", "decision_schema_version", "project", "date", "mode", "verdict", "findings", "integration_degraded", "integration_degraded_reason", "excluded_candidates", "noise_floor_discards", "verify_queue"],
+  "properties": {
+    "version": {"const": 3},
+    "decision_schema_version": {"const": 1},
+    "verdict": {"enum": ["APPROVED", "APPROVED (with suggestions)", "CHANGES RECOMMENDED", "CHANGES REQUIRED"]},
+    "integration_degraded": {"type": "boolean"},
+    "integration_degraded_reason": {"type": ["string", "null"]},
+    "findings": {"type": "array"},
+    "excluded_candidates": {"type": "array"},
+    "noise_floor_discards": {"type": "array"},
+    "verify_queue": {"type": "array", "maxItems": 8}
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nineangel.dev/schemas/integration-decisions-v1.json",
+  "title": "NineAngel semantic integration decisions",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "producer", "degraded_reason", "findings", "excluded_candidates", "derived_records", "integration_notes", "registry_updates"],
+  "properties": {
+    "version": {"const": 1},
+    "producer": {"enum": ["reducer", "deterministic-union"]},
+    "degraded_reason": {"type": ["string", "null"], "enum": ["reducer-failed-twice", "no-qualified-runner", "sandbox-unavailable", "sandbox-cleanup-failed", "runner-cleanup-failed", "shard-depth-exceeded", null]},
+    "findings": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["decision_id", "source_candidate_ids", "canonical_source_id", "title", "summary", "severity", "severity_reason", "effort", "effort_reason", "evidence", "priority_rank", "loop_status", "previous_finding_id", "consistency_shaped", "causal_claim", "repro_hint", "file", "line", "derived_from_candidate_ids"],
+        "properties": {
+          "decision_id": {"type": "string", "minLength": 1, "maxLength": 200},
+          "source_candidate_ids": {"type": "array", "minItems": 1, "maxItems": 2000, "uniqueItems": true, "items": {"type": "string", "maxLength": 200}},
+          "canonical_source_id": {"type": "string", "maxLength": 200},
+          "title": {"type": "string", "minLength": 1, "maxLength": 500},
+          "summary": {"type": "string", "minLength": 1, "maxLength": 6000},
+          "severity": {"enum": ["critical", "important", "minor", "noted"]},
+          "severity_reason": {"type": "string", "minLength": 1, "maxLength": 2000},
+          "effort": {"type": ["string", "null"], "enum": ["trivial", "moderate", "significant", null]},
+          "effort_reason": {"type": ["string", "null"], "maxLength": 2000},
+          "evidence": {"enum": ["cited-spec", "code-site", "inference"]},
+          "priority_rank": {"type": "integer", "minimum": 1},
+          "loop_status": {"type": ["string", "null"], "enum": ["persisted", "regressed", null]},
+          "previous_finding_id": {"type": ["string", "null"], "maxLength": 200},
+          "consistency_shaped": {"type": "boolean"},
+          "causal_claim": {"type": ["string", "null"], "maxLength": 3000},
+          "repro_hint": {"type": ["string", "null"], "maxLength": 3000},
+          "file": {"type": ["string", "null"], "maxLength": 1000},
+          "line": {"type": ["string", "null"], "maxLength": 200},
+          "derived_from_candidate_ids": {"type": "array", "maxItems": 2000, "uniqueItems": true, "items": {"type": "string", "maxLength": 200}}
+        }
+      }
+    },
+    "excluded_candidates": {"type": "array", "maxItems": 2000, "items": {"type": "object", "additionalProperties": false, "required": ["candidate_id", "reason", "explanation"], "properties": {"candidate_id": {"type": "string", "maxLength": 200}, "reason": {"enum": ["instruction-shaped-content-redacted", "malformed-nonfinding", "non-defect-observation", "explicitly-withdrawn-by-reconciler"]}, "explanation": {"type": "string", "minLength": 1, "maxLength": 3000}}}},
+    "derived_records": {"type": "array", "maxItems": 1000, "items": {"type": "object", "additionalProperties": false, "required": ["kind", "derived_from_candidate_ids", "title", "summary"], "properties": {"kind": {"enum": ["tier-divergence", "contradiction"]}, "derived_from_candidate_ids": {"type": "array", "minItems": 1, "maxItems": 2000, "uniqueItems": true, "items": {"type": "string", "maxLength": 200}}, "title": {"type": "string", "maxLength": 500}, "summary": {"type": "string", "maxLength": 6000}}}},
+    "integration_notes": {"type": "array", "maxItems": 200, "items": {"type": "string", "maxLength": 3000}},
+    "registry_updates": {"type": "array", "maxItems": 1000, "items": {"type": "object", "additionalProperties": false, "required": ["field", "kind", "why", "source", "severity", "status", "source_candidate_ids"], "properties": {"field": {"type": "string", "maxLength": 500}, "kind": {"type": "string", "maxLength": 500}, "why": {"type": "string", "maxLength": 3000}, "source": {"enum": ["pii", "deanon"]}, "severity": {"enum": ["high", "medium", "low"]}, "status": {"const": "candidate"}, "source_candidate_ids": {"type": "array", "minItems": 1, "maxItems": 2000, "uniqueItems": true, "items": {"type": "string", "maxLength": 200}}}}}
+  }
+}

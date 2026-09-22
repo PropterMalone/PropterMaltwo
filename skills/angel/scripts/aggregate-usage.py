@@ -46,7 +46,10 @@ def basename_started_at(run_dir_name):
 
 
 def phase_record(e, keys):
-    return {k: e.get(k) for k in keys}
+    record = {k: e.get(k) for k in keys}
+    if "backend" in e:
+        record["backend"] = e["backend"]
+    return record
 
 
 def aggregate(entries, run_dir, snapshot):
@@ -64,9 +67,26 @@ def aggregate(entries, run_dir, snapshot):
 
     measured = [x["total_tokens"] for x in entries if x.get("total_tokens") is not None]
     total_tokens = sum(measured) if measured else None
+    by_backend = {}
+    for entry in entries:
+        tokens = entry.get("total_tokens")
+        if tokens is None:
+            continue
+        backend = entry.get("backend") or "claude-agent"
+        by_backend[backend] = by_backend.get(backend, 0) + tokens
 
     reader = next((x for x in entries if x.get("phase") == "reader"), None)
-    integrator = next((x for x in entries if x.get("phase") == "integrator"), None)
+    # Pick the last integrator entry that has no STALLED/KILLED note; fall back to
+    # last entry overall. A stalled/killed first attempt logged before a delivered
+    # second attempt must not corrupt model-attribution data (f22).
+    integrator_entries = [x for x in entries if x.get("phase") == "integrator"]
+    integrator = None
+    if integrator_entries:
+        delivered = [x for x in integrator_entries
+                     if (x.get("note") or "").upper() not in ("STALLED", "KILLED")]
+        integrator = delivered[-1] if delivered else integrator_entries[-1]
+    reconciler_entries = [x for x in entries if x.get("phase") == "reconciler"]
+    verifier_entries = [x for x in entries if x.get("phase") == "verifier"]
 
     unmeasured = [
         f"{x.get('phase', '?')}:{x.get('name', '?')}"
@@ -81,6 +101,40 @@ def aggregate(entries, run_dir, snapshot):
         if sev in findings:
             findings[sev] += 1
 
+    # Read the reviewed project's git HEAD from PROJECT_COMMIT (written by init-run.sh).
+    # "null" (string) means non-git or git unavailable; absent file means unknown (pre-f34).
+    project_commit_path = Path(run_dir) / "PROJECT_COMMIT"
+    if project_commit_path.is_file():
+        raw = project_commit_path.read_text().strip()
+        project_commit = None if raw == "null" else (raw or None)
+    else:
+        project_commit = None
+
+    # Review scale is needed to distinguish yield changes from changes in target
+    # size. Both inputs already exist in every run dir, so this needs no extra
+    # orchestrator step: filelist.txt is written for full mode, src-only.diff for diff.
+    def _scale(run_dir):
+        d = Path(run_dir)
+        files = diff_lines = None
+        fl = d / "filelist.txt"
+        if fl.is_file():
+            files = sum(1 for ln in fl.read_text(errors="replace").splitlines() if ln.strip())
+        for name in ("src-only.diff", "review.diff"):
+            p = d / name
+            if p.is_file():
+                n = 0
+                for ln in p.read_text(errors="replace").splitlines():
+                    # count content lines only; +++/--- are file headers
+                    if (ln.startswith("+") or ln.startswith("-")) and not ln.startswith(("+++", "---")):
+                        n += 1
+                diff_lines = n
+                break
+        if files is None and diff_lines is None:
+            return None
+        return {"files": files, "diff_lines": diff_lines}
+
+    scale = _scale(run_dir)
+
     return {
         "run_dir": str(run_dir),
         "project": snapshot.get("project"),
@@ -90,6 +144,7 @@ def aggregate(entries, run_dir, snapshot):
         "ended_at": ended_at,
         "totals": {
             "total_tokens": total_tokens,
+            "by_backend": by_backend,
             "wall_seconds": wall_seconds,
             "reader": phase_record(reader, ("total_tokens", "duration_ms", "tool_uses")) if reader else None,
             "personas": [
@@ -97,10 +152,25 @@ def aggregate(entries, run_dir, snapshot):
                 for x in entries
                 if x.get("phase") == "persona"
             ],
-            "integrator": phase_record(integrator, ("model", "total_tokens", "duration_ms", "tool_uses")) if integrator else None,
+            "integrator": phase_record(
+                integrator,
+                ("model", "total_tokens", "duration_ms", "tool_uses",
+                 "initial_context_tokens", "peak_context_tokens", "input_tokens",
+                 "output_tokens", "request_count", "turn_count"),
+            ) if integrator else None,
+            "reconcilers": [
+                phase_record(x, ("name", "model", "total_tokens", "duration_ms", "tool_uses"))
+                for x in reconciler_entries
+            ],
+            "verifiers": [
+                phase_record(x, ("name", "model", "total_tokens", "duration_ms", "tool_uses"))
+                for x in verifier_entries
+            ],
         },
         "unmeasured": unmeasured,
         "skill_commit": None,  # filled by the shell
+        "project_commit": project_commit,
+        "scale": scale,
         "verdict": snapshot.get("verdict"),
         "findings": findings,
     }

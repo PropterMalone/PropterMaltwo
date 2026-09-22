@@ -21,31 +21,10 @@ from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # runs as __main__ from any CWD
+from angel_corpus import SNAPSHOT_CANDIDATES, in_scope, load_snapshot, run_date  # noqa: F401
 from persona_aliases import build_persona_aliases, canon_persona
 
-# Snapshot filename drift across run history. First parseable file with a
-# `findings` list wins. The canonical name (post-2026-05-30) is first.
-SNAPSHOT_CANDIDATES = [
-    "findings-snapshot.json",
-    "integrator-snapshot.json",
-    "snapshot.json",
-    "integrator-output.json",
-]
 SEV = ["critical", "important", "minor", "noted"]
-
-
-def load_snapshot(run_dir):
-    for name in SNAPSHOT_CANDIDATES:
-        p = run_dir / name
-        if not p.is_file():
-            continue
-        try:
-            data = json.loads(p.read_text())
-        except Exception:
-            continue
-        if isinstance(data, dict) and isinstance(data.get("findings"), list):
-            return data, name
-    return None, None
 
 
 def load_usage(run_dir):
@@ -70,14 +49,8 @@ def load_dispositions(run_dir):
         return {}
 
 
-def run_date(data, run_dir):
-    d = (data or {}).get("date")
-    if d:
-        return d
-    stem = run_dir.name[:8]
-    if len(stem) == 8 and stem.isdigit():
-        return f"{stem[:4]}-{stem[4:6]}-{stem[6:8]}"
-    return "????-??-??"
+
+
 
 
 def commas(n):
@@ -89,9 +62,13 @@ def main():
     ap.add_argument("--runs-dir", default=str(Path.home() / ".angel" / "runs"))
     ap.add_argument("--since", default=None, help="YYYY-MM-DD floor (inclusive)")
     ap.add_argument("--json", action="store_true", help="emit machine JSON instead of report")
+    ap.add_argument("--skill-dir", default=None,
+                    help="path to skill root for alias map (default: parent of this script); "
+                         "mirrors validate-personas.py --skill-dir for fixture testing")
     args = ap.parse_args()
 
-    amap = build_persona_aliases(Path(__file__).resolve().parent.parent)
+    skill_dir = Path(args.skill_dir).resolve() if args.skill_dir else Path(__file__).resolve().parent.parent
+    amap = build_persona_aliases(skill_dir)
 
     runs_dir = Path(args.runs_dir)
     if not runs_dir.is_dir():
@@ -113,7 +90,13 @@ def main():
     pcited = defaultdict(int)                     # findings with cited-spec/code-site evidence
     pev = defaultdict(int)                        # findings carrying any evidence value
     pdisp = defaultdict(int)                      # findings with a recorded disposition
-    pfp = defaultdict(int)                        # findings dispositioned rejected-wrong (false positives)
+    pfp = defaultdict(int)                        # false positives: human rejected-wrong OR machine REFUTED
+    pfp_human = defaultdict(int)                  # human rejected-wrong only
+    pfp_machine = defaultdict(int)                # machine REFUTED only
+    # Severity accuracy: the verifier's structured opinion on whether the filed
+    # severity matched the verified mechanism. Missing opinions are not counted,
+    # so silence never inflates the denominator.
+    psev_op = defaultdict(lambda: defaultdict(int))
     runs_with_evidence = 0
     runs_with_disp = 0
 
@@ -132,18 +115,22 @@ def main():
             project_display[key] = raw
 
     for d in run_dirs:
-        data, sname = load_snapshot(d)
+        data, sname, _errors = load_snapshot(d)
         if not data:
             continue
         date = run_date(data, d)
-        if args.since and (date.startswith("?") or date < args.since):
+        if args.since and not in_scope(date, args.since):
             continue  # exclude unknown-date runs from a --since window (conservative)
         parsed += 1
         usage = load_usage(d)
         if usage:
             with_usage += 1
         dispmap = load_dispositions(d)
-        if dispmap:
+        # finalize-run now emits a skeleton with every finding at "no-record"
+        # (plus an optional top-level experiment:true bool) — placeholders,
+        # not triage. Only real dispositions count toward coverage/precision.
+        if any(isinstance(v, dict) and v.get("disposition") not in (None, "no-record")
+               for v in dispmap.values()):
             runs_with_disp += 1
         if any(f.get("evidence") for f in (data.get("findings") or [])):
             runs_with_evidence += 1
@@ -175,8 +162,15 @@ def main():
             fid = f.get("id")
             d_entry = dispmap.get(fid) if fid else None
             d_val = d_entry.get("disposition") if isinstance(d_entry, dict) else None
+            if d_val == "no-record":
+                d_val = None  # skeleton placeholder = untriaged, not disposed
             if sev == "critical":
                 criticals.append((date, project, f.get("title") or "(untitled)", ",".join(ps)))
+            # Machine verification signal: REFUTED counts as a false-positive source,
+            # distinguished from human rejected-wrong so callers can audit each channel.
+            verif = f.get("verification") if isinstance(f, dict) else None
+            machine_refuted = (isinstance(verif, dict) and verif.get("verdict") == "REFUTED")
+            sev_op = verif.get("severity_opinion") if isinstance(verif, dict) else None
             for p in ps:
                 pfind[p] += 1
                 psev[p][sev] += 1
@@ -184,10 +178,24 @@ def main():
                     pev[p] += 1
                     if ev in ("cited-spec", "code-site"):
                         pcited[p] += 1
+                # Score a finding as a false positive at most once and only
+                # against a denominator that includes it. Human disposition takes
+                # precedence over machine refutation. REFUTED verdicts carry no
+                # severity opinion because no defect mechanism was established.
+                if sev_op in ("agree", "too-high", "too-low") and not machine_refuted:
+                    psev_op[p][sev_op] += 1
+                if machine_refuted:
+                    pfp_machine[p] += 1          # visibility only; never scored directly
                 if d_val:
                     pdisp[p] += 1
                     if d_val == "rejected-wrong":
                         pfp[p] += 1
+                        pfp_human[p] += 1
+                elif machine_refuted:
+                    # No human ruling: the machine verdict adjudicates, and must
+                    # land in the denominator it is being scored against.
+                    pdisp[p] += 1
+                    pfp[p] += 1
             if len(ps) == 1:
                 psolo[ps[0]] += 1
                 psev_solo[ps[0]][sev] += 1
@@ -243,6 +251,9 @@ def main():
                     "severity_total": dict(psev[p]), "severity_solo": dict(psev_solo[p]),
                     "cited": pcited[p], "evidence_present": pev[p],
                     "disposed": pdisp[p], "false_positives": pfp[p],
+                    "human_false_positives": pfp_human[p],
+                    "machine_false_positives": pfp_machine[p],
+                    "severity_opinions": dict(psev_op[p]),
                     "tokens": ptokens[p] if ptoken_runs[p] else None,
                     "tokens_runs": ptoken_runs[p],
                 } for p in personas
@@ -275,6 +286,26 @@ def main():
         L.append(f"_{total - parsed} run dirs skipped — no parseable findings-snapshot "
                  f"(historical layout drift; the canonical `findings-snapshot.json` is forward-complete from 2026-05-30)._")
     L.append("")
+
+    # Severity accuracy — the third number SKILL.md §9 has always promised and
+    # never been able to compute. Silent until verdicts carrying the field accrue.
+    sev_tot = defaultdict(int)
+    for p in psev_op:
+        for k, v in psev_op[p].items():
+            sev_tot[k] += v
+    n_op = sum(sev_tot.values())
+    if n_op:
+        agree = sev_tot.get("agree", 0)
+        hi, lo = sev_tot.get("too-high", 0), sev_tot.get("too-low", 0)
+        L.append("## Severity accuracy")
+        L.append("")
+        L.append(f"**{100*agree/n_op:.0f}% agree** across {n_op} CONFIRMED/PLAUSIBLE verdicts "
+                 f"carrying a `severity_opinion` — {hi} filed too high, {lo} filed too low. "
+                 f"Skew {'high' if hi > lo else 'low' if lo > hi else 'balanced'}"
+                 f"{f' ({hi}:{lo})' if hi != lo else ''}. "
+                 "REFUTED verdicts are excluded by contract (no established mechanism to "
+                 "judge the filed tier against), as are verdicts written before 2026-08-09.")
+        L.append("")
 
     L.append("## Per-persona value")
     L.append("")

@@ -2,11 +2,11 @@
 """PreToolUse hook for Bash. Push-identity validator for the multi-account
 GitHub setup on this box.
 
-Ground truth (verified): on Malone, SSH remote URLs decide push identity, not
-`gh auth switch`. ~/.ssh/config maps host aliases to keys:
+Documented example: SSH remote URLs decide push identity, not `gh auth switch`.
+A host SSH configuration may map aliases to keys:
   github.com            -> PropterMalone key
   github.com-personal  -> your-personal-account key
-  github.com-retiredaccount   -> RetiredAccount key (retired)
+  github.com-blockedaccount   -> BlockedAccount key (blocked by policy)
 `gh auth switch` only affects `gh repo create`/`pr create` and HTTPS git auth.
 
 This hook is a PURE VALIDATOR. It NEVER runs `gh auth switch` or any other
@@ -32,8 +32,7 @@ It blocks (denies) push-class commands when:
     config overrides touching remote./url./http./credential./core.sshCommand,
     appear on a push segment                              -> deny
 
-Threat model (decided a 2026-07, option A per identity-hook-angel-findings.md):
-ACCIDENT-PREVENTION NET, not adversary-proof. Static parsing cannot defeat a
+Threat model: accident-prevention, not adversary-proof. Static parsing cannot defeat a
 motivated actor with shell access (documented residual: git aliases, >3-level
 bash -c nesting, exotic env routing beyond the prefixes denied above). The goal
 is catching realistic wrong-identity accidents.

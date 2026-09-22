@@ -4,7 +4,7 @@ default: yes
 modes: [diff, full]
 experimental: false
 requires:
-  any_of: [runtime_code, hot_path_indicators]
+  any_of: [hot_path_indicators]  # ADR-07 removed an overly broad signal; require a hot-path shape or explicit selection
 context:
   digest: yes
   project_claude_md: yes

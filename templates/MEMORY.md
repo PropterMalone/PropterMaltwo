@@ -31,7 +31,7 @@ Cross-cutting topics that aren't tied to one project.
 ## Memory Layout
 
 - **This dir** — cross-project topics, backlog, patterns, lessons.
-- **Per-project dirs** (`<claude-config>/projects/<encoded-cwd>/memory/`) — project-specific
+- **Per-project dirs** (`<agent-config>/projects/<encoded-cwd>/memory/`) — project-specific
   state, auto-loaded when you're in that project's directory.
 - **Error log** — error-log.md
 

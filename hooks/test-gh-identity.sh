@@ -55,11 +55,12 @@ cat > "$TEST_DIR/identity-map.json" <<'MAPEOF'
     "your-personal-account": {
       "gh_account": "your-personal-account", "ssh_host": "github.com-personal",
       "user_name": "Pat Personal", "user_email": "pat@personal.example",
+      "email_aliases": ["pat.old@personal.example"],
       "push": true, "retired": false
     },
-    "RetiredAccount": {
-      "gh_account": "RetiredAccount", "ssh_host": "github.com-retiredaccount",
-      "user_name": "RetiredAccount", "user_email": "retired@personal.example",
+    "BlockedAccount": {
+      "gh_account": "BlockedAccount", "ssh_host": "github.com-blockedaccount",
+      "user_name": "BlockedAccount", "user_email": "blocked@personal.example",
       "push": true, "retired": true
     },
     "local-only": { "push": false, "retired": false }
@@ -186,9 +187,9 @@ R_UNTAGGED="$(make_repo untagged "" \
 R_LOCAL="$(make_repo localonly local-only \
   "git@github.com:PropterMalone/foo.git")"
 
-# RetiredAccount (retired) tag.
-R_RETIRED="$(make_repo retiredaccount RetiredAccount \
-  "git@github.com-retiredaccount:foo/bar.git")"
+# Policy-blocked account tag.
+R_BLOCKED="$(make_repo blockedaccount BlockedAccount \
+  "git@github.com-blockedaccount:foo/bar.git")"
 
 # Named-remote repo: origin is wrong host, 'upstream' is the correct pat host.
 R_NAMED="$(make_repo named your-personal-account \
@@ -205,6 +206,12 @@ R_COMMIT_BAD="$(make_repo commitbad your-personal-account \
 R_COMMIT_OK="$(make_repo commitok your-personal-account \
   "git@github.com-personal:foo/bar.git" \
   "Pat Personal" "pat@personal.example")"
+
+# Commit-author alias repo: tagged your-personal-account, author uses the
+# email_aliases address instead of the canonical user_email.
+R_COMMIT_ALIAS="$(make_repo commitalias your-personal-account \
+  "git@github.com-personal:foo/bar.git" \
+  "Pat Personal" "pat.old@personal.example")"
 
 # Untagged repo for commit hook (should allow).
 R_COMMIT_UNTAGGED="$(make_repo commituntagged "" "")"
@@ -230,9 +237,9 @@ expect "push/host-mismatch->deny" "$PUSH_HOOK" \
 expect "push/local-only->deny" "$PUSH_HOOK" \
   "git push" "$R_LOCAL" "deny"
 
-# RetiredAccount retired -> deny
-expect "push/retiredaccount-retired->deny" "$PUSH_HOOK" \
-  "git push" "$R_RETIRED" "deny"
+# Policy-blocked account -> deny
+expect "push/blockedaccount-policy->deny" "$PUSH_HOOK" \
+  "git push" "$R_BLOCKED" "deny"
 
 # git -C <dir> push (cwd elsewhere) -> resolved via -C -> allow
 expect "push/git-C-dir->allow" "$PUSH_HOOK" \
@@ -309,6 +316,10 @@ expect "commit/author-mismatch->deny" "$COMMIT_HOOK" \
 # commit author OK -> allow
 expect "commit/author-ok->allow" "$COMMIT_HOOK" \
   "git commit -m 'msg'" "$R_COMMIT_OK" "allow"
+
+# commit author via email_aliases address -> allow
+expect "commit/author-email-alias->allow" "$COMMIT_HOOK" \
+  "git commit -m 'msg'" "$R_COMMIT_ALIAS" "allow"
 
 # commit with literal word push in message, author OK -> allow
 expect "commit/push-in-msg-ok->allow" "$COMMIT_HOOK" \

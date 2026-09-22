@@ -64,7 +64,7 @@ Direct identifiers and sensitive attributes sitting in the clear:
 
 ## Examples
 
-**Flag this** — a test fixture `users.json` containing `{"name":"Margaret Tran","email":"mtran@gmail.com","ssn":"412-90-1183"}`. That's real-shaped PII in version control. Fix: replace with synthetic data (`example.com` emails, fake SSNs from a reserved test range) or generate via a factory.
+**Flag this** — a test fixture `users.json` containing `{"name":"Example Person","email":"person@example.com","ssn":"000-00-0000"}` but copied from production rather than generated as synthetic data. Provenance, not realistic formatting, makes it PII in version control. Fix: replace it with known-synthetic generated data or a documented reserved fixture.
 
 **Flag this** — `logger.info(f"charge failed for {user.email} card {card_number}")`. Raw email + PAN written to logs. Fix: log a stable non-identifying reference (`user.id`) and never the PAN; if the email is needed for debugging, gate it behind a redaction helper.
 

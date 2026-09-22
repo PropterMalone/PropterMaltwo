@@ -32,6 +32,8 @@ This is deliberately harsh. The goal is to find every assumption the docs make a
 
 You are running on a clean machine with only the OS and basic tools (terminal, git, a web browser). Nothing is pre-installed unless the project's docs explicitly tell you to install it. There is no GUI desktop, no database server running, no pre-configured environment variables, and no cached dependencies from a prior run.
 
+**Important caveat — you are NOT actually on a clean machine.** You run on a provisioned development box where Node, Python, git, and other tools are already available. This means pre-installed dependencies can mask gaps in the project's install docs — a step that silently succeeds on your machine may hard-fail on a true clean install. To counteract this: before each phase, enumerate what tools or environment that step implicitly requires, and check whether those requirements are explicitly documented. A step that succeeds only because a dependency was already present on this box — and not called out in the docs — is a finding, not a pass. Where feasible (e.g., checking declared vs. actual Node version requirements), verify declared prerequisites against what's actually available on this machine.
+
 If a step requires an external service (database, API key, third-party account), report whether the docs explain how to set it up. If the project needs something that can't exist on a fresh machine without signup or provisioning, that's a finding — not a reason to skip the phase.
 
 ## Procedure

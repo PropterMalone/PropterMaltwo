@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nineangel.dev/schemas/run-meta-v1.json",
+  "title": "NineAngel reducer-era run metadata",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["version", "integration_pipeline", "status", "run_dir", "project", "date", "mode", "reader_mode"],
+  "properties": {
+    "version": {"const": 1},
+    "integration_pipeline": {"const": "semantic-reducer-v1"},
+    "status": {"enum": ["building", "ready"]},
+    "run_dir": {"type": "string", "minLength": 1},
+    "project": {"type": "string", "minLength": 1},
+    "date": {"type": "string", "format": "date"},
+    "mode": {"type": ["string", "null"], "enum": ["diff", "full", null]},
+    "reader_mode": {"type": ["string", "null"], "enum": ["on", "off", null]},
+    "preflight": {"type": "object"},
+    "personas_run": {"type": "array"},
+    "personas_dropped": {"type": "array"},
+    "personas_failed": {"type": "array"},
+    "pass_denominators": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 1}},
+    "codebase": {"type": "object"},
+    "jev_eligibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data_class", "identifiers_stripped", "approval_basis"],
+      "properties": {
+        "data_class": {"enum": ["ineligible", "public", "synthetic", "private-approved"]},
+        "identifiers_stripped": {"type": "boolean"},
+        "approval_basis": {"type": ["string", "null"]}
+      }
+    }
+  }
+}
