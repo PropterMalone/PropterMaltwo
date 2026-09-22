@@ -3,9 +3,9 @@ name: docket
 description: Daily planner — time-aware plan coordinating the user's day and Claude's day, with calendar awareness and queue integration
 ---
 
-> **INTEGRATION STUB.** This skill wires Claude Code to an external tool/account that you must supply and configure: **a personal planner CLI + a queue tool + calendar access (the real setup uses bespoke `docket` + `phyllis` CLIs)**. It ships as a working example of the integration pattern, not a turnkey feature. See `docs/integrations.md` for what to install and how to plug in your own credentials. Without **a personal planner CLI + a queue tool + calendar access**, this skill won't run — that's expected.
+> **INTEGRATION STUB.** This skill wires Claude Code to external tools/accounts that you must supply and configure: **a personal planner CLI + a queue tool + calendar access**. It ships as a working example of the integration pattern, not a turnkey feature. See `docs/integrations.md` for what to install and how to plug in your own credentials. Without **a personal planner CLI + a queue tool + calendar access**, this skill won't run — that's expected.
 
-Generate a daily plan that assigns tasks to calendar free slots, identifies Claude autonomous work, and signals reservations to your background-queue tool. The example setup uses two bespoke local CLIs: a planner (`<planner-cli>`, called `docket` in the real install) and a background-queue/scheduler (`<queue-cli>`, called `phyllis` in the real install). Follow these steps exactly:
+Generate a daily plan that assigns tasks to calendar free slots, identifies Claude autonomous work, and signals reservations to your background-queue tool. The example setup uses a planner (`<planner-cli>`) and a background queue/scheduler (`<queue-cli>`). Follow these steps exactly:
 
 ## 1. Fetch data (parallel)
 

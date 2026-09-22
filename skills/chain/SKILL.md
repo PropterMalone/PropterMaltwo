@@ -1,6 +1,6 @@
 ---
 name: chain
-description: Run a sequence of audits or audit-shaped tasks autonomously, each in a fresh subagent context. Each leg ships mechanical fixes, queues semantic findings to a per-chain backlog file, and triggers the next leg. Usage: /chain <name> [-- audit1 prompt | audit2 prompt | ...] OR /chain <name> (resumes existing chain).
+description: "Run a sequence of audits or audit-shaped tasks autonomously, each in a fresh subagent context. Each leg ships mechanical fixes, queues semantic findings to a per-chain backlog file, and triggers the next leg. Usage: /chain <name> [-- audit1 prompt | audit2 prompt | ...] OR /chain <name> (resumes existing chain)."
 ---
 
 An audit-chain pattern (e.g. legibility → time-awareness → coverage), tooled. Each leg of the chain is independent, gets a clean subagent context, and produces:

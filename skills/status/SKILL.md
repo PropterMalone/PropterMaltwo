@@ -27,12 +27,12 @@ cd <your-queue-tool-dir> && <your-queue-tool> queue list 2>&1 | head -30
 Note anything queued, in-progress, or recently completed. Flag overdue items. (If your queue CLI resolves dependencies relative to cwd — e.g. `tsx` does — `cd` into its directory first; running it from an absolute path can fail silently.)
 
 ### Scheduled triggers (remote agents)
-Use `RemoteTrigger` tool with `action: list`. Report:
+If the host exposes a `RemoteTrigger` tool, use it with `action: list`. Otherwise skip this probe and report `Triggers: unavailable in this host`. Report:
 - Active triggers with their next fire time
 - Most recent run result per trigger
 
 ### In-session crons
-Use `CronList` tool. These are `/loop` or one-shot schedules created this session.
+If the host exposes a `CronList` tool, use it. These are `/loop` or one-shot schedules created this session. Otherwise skip this probe and report `In-session crons: unavailable in this host`.
 
 ### Long-running processes
 
@@ -42,8 +42,8 @@ ps -eo pid,etimes,cmd --sort=-etimes 2>/dev/null | awk 'NR==1 || ($2 > 600 && $2
 ```
 Look for: `node`, `python`, `claude`, `curl`, `rsync`, orphaned `ssh -R` tunnels from past sessions, stray dev servers.
 
-### In-session bash/agent tasks
-Mentally scan the tool-use history: any Bash with `run_in_background: true`, any Agent with `run_in_background: true`, any Monitor still active. The harness tracks these — if you need an explicit list, the `/tasks` slash command shows them, but for `/status` just report what you kicked off this session.
+### In-session shell/agent tasks
+Scan the tool-use history for background shell sessions, subagents, or monitors that are still active. Use the host's task/session listing tool if one is available (in Claude Code, the `/tasks` slash command); otherwise report only the work you launched in this conversation.
 
 ## 2. Systemd user units (occasional — only if triggered)
 
@@ -75,4 +75,5 @@ If nothing's running anywhere, just say "Background: nothing active." and stop.
 
 - This skill is read-only. Never kill, restart, or modify anything. If the user wants to act on something surfaced here, they'll say so.
 - If a probe fails (queue CLI path moved, tmux not installed, etc.), note it silently and continue with the others. Don't block the report on any single probe.
+- **Degrade, don't assume.** Every probe above names a capability that a given host may not have: a host-specific tool, a CLI, a daemon. Check before you call, and when it isn't there report `<probe>: unavailable in this host` rather than inventing a result or dropping the line. A missing capability and an empty result are different answers, and the user acts on them differently.
 - For very long-running jobs (overnight batches, multi-day downloads), include a rough percent-done or elapsed-time estimate if the tmux capture makes it obvious.

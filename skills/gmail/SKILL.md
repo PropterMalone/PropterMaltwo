@@ -22,6 +22,7 @@ You may edit drafts in the Gmail web UI and send them without telling the agent.
 
 - On `draft` create/update, the tool records the body it wrote under `~/.config/gmail-tool/`.
 - `gmail delete` and `gmail draft --update` re-read the **live** draft first and **REFUSE** (exit 2, with a diff) if it differs from what the tool wrote — i.e. if you edited it. Pass `--force` only after confirming.
+- **Compare whitespace-insensitively, or the guard eats itself.** Opening a draft in Gmail's desktop compose re-wraps its stored `text/plain` (measured: 26 lines at <=371 chars came back as 52 lines at <=100). Storing via the API does not — an unopened draft reads back byte-identical. So a strict byte comparison marks every draft the user has merely *looked at* as "edited" and refuses every subsequent update, forever, on a draft nobody touched. Fall back to a whitespace-insensitive comparison and print a note (`... differs only in line wrapping`) when that path fires; real word- and sentence-level edits still refuse. The deliberate trade-off: a whitespace-only hand edit now counts as no change, which is acceptable because an update rewrites the formatting anyway.
 - Gmail `drafts.delete` is **permanent** (no Trash). **NEVER** delete or supersede a draft via raw `gws gmail users drafts delete` — that bypasses the guard. A PreToolUse hook can block the raw form; use `gmail delete`.
 
 ```
@@ -55,6 +56,17 @@ Add `--no-thread` to the above. Recipient-side threading still works via the In-
 **Force-send** (sanitizer still runs):
 Use `gmail send` with the same args (no `--update`). The "drafts not send" default means this should be rare and explicit.
 
+## Line wrapping — why the default is multipart/alternative
+
+A bare **`text/plain` draft can open Gmail's desktop compose in plain-text mode**. Observed hard wrapping can split a shell command and break copy-paste; generated plain-text fallbacks may do the same.
+
+The wrapper therefore emits **`multipart/alternative`** (text/plain + text/html) by default. Rich text preserves line structure in the tested path.
+
+- `--plain` forces bare `text/plain` for recipients or lists that require it.
+- `--flowed` stays opt-in and is unsafe for anything that will be opened in a compose window before sending.
+
+**Still put every command, path, and URL on its own line.** Plain-text readers may receive a wrapped fallback, and own-line commands are more resilient.
+
 ## Defaults
 
 - Body: write to `/tmp/body-<descriptor>.txt` and pass `--body-file` (avoids shell-quoting hell)
@@ -81,3 +93,12 @@ All caught by the sanitizer. Don't go around it.
 
 - Sending an existing draft built in the Gmail web UI: that draft never went through the sanitizer, so use raw `gws gmail users drafts send` only if you explicitly want that bypass.
 - Bulk operations (>10 drafts at once): the wrapper isn't optimized for that; confirm before doing it.
+
+## Draft the body in the review page first
+
+For any body with a second paragraph, write it to a Markdown file and iterate with the user in the `/prose` review page (`skills/prose/SKILL.md`) before staging the Gmail draft from that file. Gmail compose is send-only from there on. Two-line replies skip this and go straight to the draft.
+
+<!-- WHY: compose edits are invisible to the session — the model never sees what
+     changed, and the clobber guard above then has to reason about a body it
+     didn't write. Edits in the review page land in the file the session already
+     reads, so the draft and the model's model of the draft stay the same thing. -->

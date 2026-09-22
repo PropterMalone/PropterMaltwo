@@ -1,0 +1,6 @@
+# Codex-side interface metadata for this skill. Claude Code ignores this file;
+# a Codex host reads it to name the skill and seed its default prompt.
+interface:
+  display_name: "Background Status"
+  short_description: "Report live jobs, queues, and sessions"
+  default_prompt: "Use $status to report what is currently running in the background."

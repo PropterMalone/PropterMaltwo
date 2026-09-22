@@ -1,0 +1,7 @@
+# Codex-side interface metadata for this skill. Claude Code ignores this file;
+# a Codex host reads it to name the skill and seed its default prompt, so one
+# SKILL.md can serve both hosts (see SKILL.md § 3).
+interface:
+  display_name: "Code"
+  short_description: "Delegate a bounded implementation task"
+  default_prompt: "Use $code to delegate this implementation task to an isolated subagent."

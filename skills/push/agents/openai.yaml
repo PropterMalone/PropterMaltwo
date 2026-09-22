@@ -1,0 +1,6 @@
+# Codex-side interface metadata for this skill. Claude Code ignores this file;
+# a Codex host reads it to name the skill and seed its default prompt.
+interface:
+  display_name: "Push to workstation"
+  short_description: "Serve a local file for viewing in the workstation browser"
+  default_prompt: "Use $push to make this local file viewable on the workstation."

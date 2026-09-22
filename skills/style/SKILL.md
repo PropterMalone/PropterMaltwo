@@ -1,7 +1,7 @@
 ---
 name: style
-description: Set, clear, or list communication styles. Usage: /style <name>, /style off, /style list
-user-invocable: true
+description: "Set, clear, or list communication styles. Usage: /style <name>, /style off, /style list"
+user_invocable: true
 ---
 
 # Style Switcher

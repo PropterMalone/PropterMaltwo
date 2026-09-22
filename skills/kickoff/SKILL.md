@@ -13,10 +13,16 @@ description: Session kickoff — orient from memory, state understanding, ask ag
     <memory-dir>   your central memory dir. Claude Code derives a per-project
                    memory path from the cwd; the central one is the project
                    memory dir for your home/`~` sessions. See docs/memory-system.md.
+    <state-dir>    where your harness keeps runtime state — e.g. ~/.claude/state
+    <scripts>      where your helper scripts live (if any)
     <dev-box>      the machine Claude Code runs on
     <workstation>  where you physically sit (browser, OAuth callbacks)
     <queue-tool>   an example background-task queue (swap for yours, or delete)
     <comms-source> an example inbox/chat/meeting source (Gmail/Slack/etc.)
+    <steady-state-model-id>
+                   the model id you've pinned as your everyday driver, if you
+                   run a model-default doctrine (see CLAUDE.md). Delete the
+                   driver-default bullet below if you don't.
 -->
 
 Session kickoff. Get oriented fast.
@@ -38,6 +44,22 @@ Read in parallel:
 - Glob for `handoff_*.md` in the per-project memory dir (or `<memory-dir>` if running from `~`). Read if <3 days old.
 - `patterns.md` — only if modified in the last 3 days (check mtime), otherwise skip.
 - The active-style override file, if one exists — surface the active style in the state block (the `style` skill sets it; CLAUDE.md flags it as a session-start check but it has to actually happen here).
+- **Driver-default check** (skip if you don't pin a steady-state model). Read two things: the model your harness is configured to launch with (for Claude Code, the top-level `model` key in `settings.json`, which `/model` rewrites — so a one-session pick silently becomes the saved default), and a time-boxed **stint file** at `<state-dir>/driver-stint.json` with fields `model`, `opened`, `ends`, `reason`, `restore_to`, `note`. A stint is the written record of a deliberate, temporary deviation: which model, why, when it expires, what to restore to, and which memory note carries its findings. Branches, first match wins:
+  1. **Stint file exists and its `ends` has passed** → offer cleanup: delete the stint file and the memory note its `note` field names, drop the stint line from MEMORY.md, and — if the configured model still differs from `<steady-state-model-id>` — offer the restore in the same breath.
+  2. **Configured model differs and no stint file exists** → one line in the state block: `Driver default: <model>, no open stint. Restore <steady-state-model-id>? (y/n)`. An undeclared deviation is usually a leftover from a `/model` pick that was meant to last one session.
+  3. **Otherwise** (key matches, or a stint is open and unexpired) → say nothing.
+
+  Offer; never act unasked. Changing the saved default edits the user's environment, so it needs an explicit go. And **after kickoff, never challenge the user's model pick** — a deviation they chose on purpose is a decision, not drift. This check fires once, at orient time, or not at all.
+  ```bash
+  # adapt: your harness's config path + state dir
+  jq -r .model ~/.claude/settings.json
+  cat <state-dir>/driver-stint.json 2>/dev/null
+  ```
+- **ADR sweep liveness** (skip if you don't run a decision-record falsifier sweep — see the `retro` skill §4.7). The sweep is a cron job that runs each ADR's `falsifier_cmd` and appends one `run … done` summary line per run to its log. Check only that it is alive:
+  ```bash
+  grep -P '\trun\t' <state-dir>/adr-sweep.log | tail -1 | cut -f1
+  ```
+  Missing log, or a last run older than 8 days → one state-block line: `ADR sweep dead: last run <date|never>.` Otherwise silent. Adjudicating what the sweep *found* (`fired:` / `support_lost:` lines) is retro's job, not kickoff's — kickoff only reports that the instrument is still running. A dead sweep is worth surfacing precisely because its failure mode is silence: nothing fires, and everything reads clean.
 
 If no handoff found, read `calibration.md`'s latest entry (just the last note, not the whole file) and the per-project topic file if in a specific project.
 

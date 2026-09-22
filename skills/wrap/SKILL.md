@@ -14,23 +14,31 @@ description: End-of-session wrap — update calibration, memory, backlog, lesson
     <memory-dir>   your central memory dir (Claude Code derives a per-project
                    one from the cwd; the central one is your `~`-session memory
                    dir). See docs/memory-system.md.
+    <state-dir>    where your harness keeps runtime state — e.g. ~/.claude/state
+    <scripts>      where your helper scripts live (if any)
     <queue-tool>   an example background-task queue
     <review-skill> a code-review battery (the `/angel` skill here)
+    <steady-state-model-id>
+                   the model id you've pinned as your everyday driver, if you
+                   run a model-default doctrine (see CLAUDE.md and the kickoff
+                   skill). Delete §8.6 if you don't.
 -->
 
 Session wrap. Run through each step, skip what doesn't apply.
 
 ## 1. Calibration note (`calibration.md`)
 
-Append under `## Session Notes`:
+**Insert directly BELOW the `## Session Notes` header line** — newest-first:
 ```
 ### YYYY-MM-DD — Brief title
 **Execution: X | Satisfaction: Y**
 What shipped + key mistake (if any). 2-3 lines max.
 ```
+**Do NOT tail-append to the file.** This is the recurring footgun of the index-plus-appendix file shape: if anything lives at the BOTTOM of `calibration.md` (a capability inventory, a scoring rubric, an archive pointer), an end-of-file append strands the new entry below it and breaks the one-contiguous-block structure the trim rule and every later reader depend on. Locate the `## Session Notes` header, insert under it, done. Same rule applies to any file you append to that has a footer section.
+
 Grade honestly (A/B/C/D scale — definitions in `calibration.md`'s header). Don't deduct for external blockers.
 
-**Grade perturbation rule:** If your initial grade lands on `B+`, `A-`, or `A`, force a one-notch counter-argument (`B+ → argue for B vs A-; A- → argue for B+ vs A; A → argue for A-`) before settling. The B+/A- pair is the dominant anchor in most calibration logs — that's round-number anchoring (see `rules/quality.md`). If the counter-argument resolves to "default feels right," downgrade by one notch. (This rule earns its keep once the log has enough entries to show clustering; until then, just grade and move on.)
+**Grade perturbation rule:** If your initial grade lands on `B+`, `A-`, or `A`, force a one-notch counter-argument (`B+ → argue for B vs A-; A- → argue for B+ vs A; A → argue for A-`) before settling. If the counter-argument resolves to "default feels right," downgrade by one notch. Calibration grades clustered high and missed a known verification lapse, so challenge the comfortable anchor before settling. (The rule earns its keep once your own log has enough entries to show clustering; until then, just grade and move on.)
 
 **Trim rule:** If `## Session Notes` has >15 entries, archive the oldest 5 to `calibration-archive.md` (compressed to grade + one-liner) before appending the new entry. Keeps the live file lean and makes archival continuous instead of retro-dependent.
 
@@ -177,6 +185,18 @@ If `/wrap` crashed partway through (API blip, context overflow at 95%, hook time
 4. If an "in flight" review note predates the crash: kickoff section 1.5's reconcile path catches it
 
 **Avoiding the failure mode**: at 95% context, write the handoff FIRST (it's step 4 in the normal order, but at 95% drop the rest and write step 4 only — it survives the wrap). Calibration can be back-filled next session.
+
+## 8.6. Driver-default restore offer (skip if you don't pin a steady-state model)
+
+The mirror of the kickoff skill's driver-default check — kickoff catches an undeclared deviation at orient time, wrap closes out a declared one at session end. Read the same two things: the model your harness is configured to launch with, and the stint file at `<state-dir>/driver-stint.json` (`model`, `opened`, `ends`, `reason`, `restore_to`, `note`).
+
+- **Stint file exists and its `ends` has passed** → offer once to set the configured model back to the stint's `restore_to`, delete the stint file and the memory note its `note` field names, and drop the stint line from MEMORY.md.
+- **No stint file and the configured model isn't `<steady-state-model-id>`** → offer once to restore it.
+- **Stint still open** → say nothing.
+
+Act only on the user's explicit go; they may prefer to flip the model themselves. Restoring the saved default edits their environment, which is not something a wrap does unasked.
+
+**The evaluation line.** If this session drove on a premium model inside a declared window, check that the §1 calibration note carries **one retro-readable line on what that model caught, missed, or did differently against your steady-state baseline** — and add it now if §1 missed it. This is the whole point of time-boxing the deviation: a window is an experiment, and an experiment that produces no comparison produced a vibe, not a result. The line is cheap to write while the session is fresh and unrecoverable a week later, which is exactly when the retro asks whether the premium tier was worth its price.
 
 ## 9. Sign-off
 
