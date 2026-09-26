@@ -2,20 +2,17 @@
 """PreToolUse hook for Bash. Push-identity validator for the multi-account
 GitHub setup on this box.
 
-Documented example: SSH remote URLs decide push identity, not `gh auth switch`.
-A host SSH configuration may map aliases to keys:
-  github.com            -> PropterMalone key
-  github.com-personal  -> your-personal-account key
-  github.com-blockedaccount   -> BlockedAccount key (blocked by policy)
-`gh auth switch` only affects `gh repo create`/`pr create` and HTTPS git auth.
+SSH remote URLs decide push identity, not `gh auth switch`. A host SSH
+configuration may map aliases to distinct identity keys. `gh auth switch` only
+affects `gh repo create`/`pr create` and HTTPS git authentication.
 
 This hook is a PURE VALIDATOR. It NEVER runs `gh auth switch` or any other
 command with global side effects — the allow path has zero side effects beyond
 a best-effort audit-log line when an override env var is used. On any decision
 it cannot make safely, it DENIES (fail-closed).
 
-Identity is read from `git config --local claude.identity <id>` and validated
-against ~/.claude/github-identity-map.json.
+Identity is read from `git config --local proptermaltwo.identity <id>` with a
+legacy `claude.identity` fallback, then validated against the configured map.
 
 It blocks (denies) push-class commands when:
   - the repo is untagged (no claude.identity)            -> tag-and-retry
@@ -72,15 +69,28 @@ from _gh_identity_common import (  # noqa: E402
     GIT_BARE_GLOBAL_FLAGS,
     GIT_DIR_OPTS,
     GIT_VALUE_GLOBAL_FLAGS,
+    LEGACY_IDENTITY_ENV,
+    LEGACY_MAP_ENV,
+    LEGACY_OVERRIDE_ENV,
+    PREFERRED_IDENTITY_ENV,
+    PREFERRED_MAP_ENV,
+    PREFERRED_OVERRIDE_ENV,
+    PREFERRED_REPO_KEY,
     _base,
     expand_tokens,
     is_assignment as _is_assignment,
+    preferred_env,
+    preferred_mapping,
+    read_repo_identity,
     segment,
 )
 
-MAP_PATH = os.path.expanduser(
-    os.environ.get("CLAUDE_GH_IDENTITY_MAP", "~/.claude/github-identity-map.json")
-)  # env override lets the test suite (and adopters) point at a fixture map
+_MAP_VALUE, MAP_CONFLICT = preferred_env(
+    PREFERRED_MAP_ENV,
+    LEGACY_MAP_ENV,
+    "~/.claude/github-identity-map.json",
+)
+MAP_PATH = os.path.expanduser(_MAP_VALUE or "~/.claude/github-identity-map.json")
 
 # When shlex can't parse a command, we can't segment it — so we fall back to a
 # substring test to decide whether to fail closed. It MUST be tight: a bare
@@ -496,11 +506,6 @@ def resolve_toplevel(repo_dir: str | None, cwd: str) -> str | None:
     return top
 
 
-def read_identity_tag(top: str) -> str | None:
-    rc, val = _git(["-C", top, "config", "--local", "--get", "claude.identity"], cwd=None)
-    if rc != 0 or not val:
-        return None
-    return val
 
 
 def read_remote_url(top: str, remote: str) -> str | None:
@@ -646,7 +651,7 @@ def evaluate(command: str, cwd: str) -> int:
             return deny(
                 "Couldn't parse the command safely and it appears push-related. "
                 "Re-run with a simpler form, ensure the repo is tagged "
-                "(git config claude.identity <id>), and retry."
+                f"(git config {PREFERRED_REPO_KEY} <id>), and retry."
             )
         return 0
 
@@ -708,6 +713,8 @@ def evaluate(command: str, cwd: str) -> int:
     if not push_descriptors:
         return 0  # allow — no push-class command
 
+    if MAP_CONFLICT:
+        return deny(f"Identity map configuration conflict: {MAP_CONFLICT}. Unset or align one variable.")
     try:
         idmap = load_map()
     except (OSError, json.JSONDecodeError) as exc:
@@ -727,8 +734,17 @@ def evaluate(command: str, cwd: str) -> int:
 def _check_descriptor(desc: dict, identities: dict) -> str | None:
     """Validate one push-class descriptor. Returns a deny reason, or None."""
     env = desc["_env"]
-    override = env.get("CLAUDE_IDENTITY_OVERRIDE")
-    supplied = env.get("CLAUDE_IDENTITY")
+    override, override_conflict = preferred_mapping(
+        env, PREFERRED_OVERRIDE_ENV, LEGACY_OVERRIDE_ENV
+    )
+    supplied, supplied_conflict = preferred_mapping(
+        env, PREFERRED_IDENTITY_ENV, LEGACY_IDENTITY_ENV
+    )
+    if override_conflict or supplied_conflict:
+        return (
+            "Identity environment conflict: "
+            f"{override_conflict or supplied_conflict}. Unset or align one variable."
+        )
 
     # Transport/identity-rerouting env vars on a push segment (ADV-6/7/8
     # mitigation): the static checks below validate the STORED remote config,
@@ -772,9 +788,9 @@ def _check_descriptor(desc: dict, identities: dict) -> str | None:
             if not chosen:
                 return (
                     "gh repo create outside a tagged repo: set the identity "
-                    "explicitly, e.g. CLAUDE_IDENTITY=<PropterMalone|your-personal-account> "
+                    f"explicitly, e.g. {PREFERRED_IDENTITY_ENV}=<identity-id> "
                     "gh repo create ... (then the new repo should be tagged "
-                    "with git config claude.identity <id>)."
+                    f"with git config {PREFERRED_REPO_KEY} <identity-id>)."
                 )
             return _check_identity_policy_and_ghstate(
                 chosen, desc, identities, top=None
@@ -784,21 +800,23 @@ def _check_descriptor(desc: dict, identities: dict) -> str | None:
             f"{desc['dir'] or desc['_cwd']}. Run inside the repo (or pass -C <dir>)."
         )
 
-    # Read the per-repo tag.
-    tag = read_identity_tag(top)
+    # Read the preferred neutral repo tag with legacy fallback.
+    tag, tag_conflict = read_repo_identity(top)
+    if tag_conflict:
+        return tag_conflict
 
     if tag is None:
         if override:
             _audit_override(
-                f"CLAUDE_IDENTITY_OVERRIDE={override} used to bypass untagged "
+                f"{PREFERRED_OVERRIDE_ENV}={override} used to bypass untagged "
                 f"block on {top} (kind={desc['kind']})"
             )
             tag = override
         else:
             return (
-                f"Repo not tagged. Run: git -C {top} config claude.identity "
-                "<PropterMalone|your-personal-account|local-only>  (then retry the push). "
-                "If you must bypass once, prefix CLAUDE_IDENTITY_OVERRIDE=<id> "
+                f"Repo not tagged. Run: git -C {top} config {PREFERRED_REPO_KEY} "
+                "<identity-id>  (then retry the push). "
+                f"If you must bypass once, prefix {PREFERRED_OVERRIDE_ENV}=<identity-id> "
                 "— it still enforces the host/gh-account checks."
             )
 
@@ -812,8 +830,7 @@ def _check_identity_policy_and_ghstate(
     if entry is None:
         return (
             f"Identity tag {tag!r} is not in the identity map "
-            f"({MAP_PATH}). Re-tag with a known id "
-            "(PropterMalone | your-personal-account | local-only)."
+            f"({MAP_PATH}). Re-tag with a known <identity-id>."
         )
 
     # Policy gates.
@@ -821,8 +838,7 @@ def _check_identity_policy_and_ghstate(
         return (
             f"Identity {tag!r} is RETIRED (pushes blocked). "
             f"Re-tag the repo with an active identity: "
-            f"git -C {top or '<repo>'} config claude.identity "
-            "<PropterMalone|your-personal-account>."
+            f"git -C {top or '<repo>'} config {PREFERRED_REPO_KEY} <identity-id>."
         )
     if entry.get("push") is False:
         note = entry.get("note", "")
@@ -830,8 +846,7 @@ def _check_identity_policy_and_ghstate(
             f"Identity {tag!r} has push disabled by policy"
             + (f" ({note})" if note else "")
             + ". Re-tag with a push-enabled identity to push: "
-            f"git -C {top or '<repo>'} config claude.identity "
-            "<PropterMalone|your-personal-account>."
+            f"git -C {top or '<repo>'} config {PREFERRED_REPO_KEY} <identity-id>."
         )
 
     expected_ssh_host = entry.get("ssh_host")
@@ -935,7 +950,7 @@ def main() -> int:
             return deny(
                 f"Internal error while validating push identity ({exc}). "
                 "Refusing to allow an unverified push. Re-run after tagging "
-                "the repo (git config claude.identity <id>)."
+                f"the repo (git config {PREFERRED_REPO_KEY} <id>)."
             )
         return 0
 

@@ -1,0 +1,145 @@
+{
+  "schema_version": 1,
+  "static_support_values": ["native", "adapted", "degraded", "unsupported", "not-tested"],
+  "activation_values": ["verified-active", "installed-untrusted", "inactive", "unverified", "failed"],
+  "capability_keys": ["instructions", "skills", "memory", "subagents", "identity_hooks", "permissions", "integrations"],
+  "profile_order": ["core", "standard", "full"],
+  "shared_groups": {
+    "shared_core": [
+      {"source": "rules/quality.md", "destination": "shared/rules/quality.md", "operation": "managed-copy"},
+      {"source": "rules/testing.md", "destination": "shared/rules/testing.md", "operation": "managed-copy"},
+      {"source": "rules/glossary.md", "destination": "shared/rules/glossary.md", "operation": "managed-copy"},
+      {"source": "rules/comms.md", "destination": "shared/rules/comms.md", "operation": "managed-copy"},
+      {"source": "docs/memory-system.md", "destination": "shared/docs/memory-system.md", "operation": "managed-copy"},
+      {"source": "docs/integrations.md", "destination": "shared/docs/integrations.md", "operation": "managed-copy"},
+      {"source_tree": "skills/status", "destination": "shared/skills/status", "operation": "managed-copy"}
+    ],
+    "shared_standard": [
+      {"source": "templates/MEMORY.md", "destination": "shared/templates/MEMORY.md", "operation": "managed-copy"},
+      {"source": "hooks/gh-identity-guard.py", "destination": "shared/hooks/gh-identity-guard.py", "operation": "managed-copy"},
+      {"source": "hooks/gh-commit-author-guard.py", "destination": "shared/hooks/gh-commit-author-guard.py", "operation": "managed-copy"},
+      {"source": "hooks/_gh_identity_common.py", "destination": "shared/hooks/_gh_identity_common.py", "operation": "managed-copy"},
+      {"source": "hooks/github-identity-map.example.json", "destination": "shared/hooks/github-identity-map.example.json", "operation": "managed-copy"},
+      {"source": "adapters/shared/host-hook-bridge.py", "destination": "shared/hooks/host-hook-bridge.py", "operation": "managed-copy"}
+    ]
+  },
+  "hosts": {
+    "claude-code": {
+      "maturity": "first-class", "scope": "global", "supported_profiles": ["full"], "default_profile": "full", "target": "claude_home",
+      "lifecycle": {"doctor": true, "rollback": true, "uninstall": true},
+      "profiles": {
+        "full": {
+          "groups": ["claude_legacy"], "skills": "all legacy Claude skills",
+          "capabilities": {"instructions": "native", "skills": "native", "memory": "native", "subagents": "native", "identity_hooks": "native", "permissions": "native", "integrations": "adapted"}
+        }
+      }
+    },
+    "codex": {
+      "maturity": "first-class", "scope": "global", "supported_profiles": ["core", "standard", "full"], "default_profile": "standard", "target": "codex_home",
+      "lifecycle": {"doctor": true, "rollback": true, "uninstall": true},
+      "profiles": {
+        "core": {
+          "groups": ["shared_core", "codex_core"], "skills": ["code", "status"],
+          "capabilities": {"instructions": "native", "skills": "adapted", "memory": "unsupported", "subagents": "native", "identity_hooks": "unsupported", "permissions": "native", "integrations": "unsupported"}
+        },
+        "standard": {
+          "groups": ["shared_core", "shared_standard", "codex_core", "codex_standard"], "skills": ["code", "status", "kickoff", "wrap"],
+          "capabilities": {"instructions": "native", "skills": "adapted", "memory": "adapted", "subagents": "native", "identity_hooks": "adapted", "permissions": "native", "integrations": "unsupported"}
+        },
+        "full": {
+          "groups": ["shared_core", "shared_standard", "codex_core", "codex_standard"], "skills": ["code", "status", "kickoff", "wrap"],
+          "capabilities": {"instructions": "native", "skills": "adapted", "memory": "adapted", "subagents": "native", "identity_hooks": "adapted", "permissions": "native", "integrations": "unsupported"}
+        }
+      },
+      "artifact_groups": {
+        "codex_core": [
+          {"source": "adapters/codex/AGENTS.md", "target": "codex_home", "destination": "AGENTS.md", "operation": "install-or-stage"},
+          {"source_tree": "adapters/codex/skills/code", "target": "proptermaltwo_home", "destination": "adapters/codex/skills/code", "operation": "managed-copy"},
+          {"target": "codex_skills_home", "destination": "code", "operation": "symlink", "link_target": "proptermaltwo_home:adapters/codex/skills/code"},
+          {"target": "codex_skills_home", "destination": "status", "operation": "symlink", "link_target": "proptermaltwo_home:shared/skills/status"}
+        ],
+        "codex_standard": [
+          {"source_tree": "adapters/codex/skills/kickoff", "target": "proptermaltwo_home", "destination": "adapters/codex/skills/kickoff", "operation": "managed-copy"},
+          {"source_tree": "adapters/codex/skills/wrap", "target": "proptermaltwo_home", "destination": "adapters/codex/skills/wrap", "operation": "managed-copy"},
+          {"target": "codex_skills_home", "destination": "kickoff", "operation": "symlink", "link_target": "proptermaltwo_home:adapters/codex/skills/kickoff"},
+          {"target": "codex_skills_home", "destination": "wrap", "operation": "symlink", "link_target": "proptermaltwo_home:adapters/codex/skills/wrap"},
+          {"source": "adapters/codex/hooks.json.tmpl", "target": "codex_home", "destination": "hooks.json", "operation": "codex-hooks-merge"}
+        ]
+      }
+    },
+    "polytoken": {
+      "maturity": "first-class", "scope": "global", "supported_profiles": ["core", "standard", "full"], "default_profile": "standard", "target": "polytoken_home",
+      "lifecycle": {"doctor": true, "rollback": true, "uninstall": true},
+      "profiles": {
+        "core": {
+          "groups": ["shared_core", "polytoken_core"], "skills": ["code", "status"],
+          "capabilities": {"instructions": "native", "skills": "adapted", "memory": "unsupported", "subagents": "native", "identity_hooks": "unsupported", "permissions": "native", "integrations": "unsupported"}
+        },
+        "standard": {
+          "groups": ["shared_core", "shared_standard", "polytoken_core", "polytoken_standard"], "skills": ["code", "status", "kickoff", "wrap"],
+          "capabilities": {"instructions": "native", "skills": "adapted", "memory": "adapted", "subagents": "native", "identity_hooks": "adapted", "permissions": "native", "integrations": "unsupported"}
+        },
+        "full": {
+          "groups": ["shared_core", "shared_standard", "polytoken_core", "polytoken_standard"], "skills": ["code", "status", "kickoff", "wrap"],
+          "capabilities": {"instructions": "native", "skills": "adapted", "memory": "adapted", "subagents": "native", "identity_hooks": "adapted", "permissions": "native", "integrations": "unsupported"}
+        }
+      },
+      "artifact_groups": {
+        "polytoken_core": [
+          {"source": "adapters/polytoken/AGENTS.md", "target": "polytoken_home", "destination": "AGENTS.md", "operation": "install-or-stage"},
+          {"source_tree": "adapters/polytoken/skills/code", "target": "polytoken_home", "destination": "skills/code", "operation": "managed-copy"},
+          {"source_tree": "skills/status", "target": "polytoken_home", "destination": "skills/status", "operation": "managed-copy"}
+        ],
+        "polytoken_standard": [
+          {"source_tree": "adapters/polytoken/skills/kickoff", "target": "polytoken_home", "destination": "skills/kickoff", "operation": "managed-copy"},
+          {"source_tree": "adapters/polytoken/skills/wrap", "target": "polytoken_home", "destination": "skills/wrap", "operation": "managed-copy"},
+          {"source": "adapters/polytoken/hooks.json.tmpl", "target": "polytoken_home", "destination": "hooks.json", "operation": "polytoken-hooks-merge"}
+        ]
+      }
+    },
+    "copilot": {
+      "maturity": "preview", "scope": "project", "supported_profiles": ["core"], "default_profile": "core", "target": "project",
+      "lifecycle": {"doctor": true, "rollback": true, "uninstall": true},
+      "profiles": {
+        "core": {
+          "groups": ["copilot_core"], "skills": [],
+          "capabilities": {"instructions": "adapted", "skills": "unsupported", "memory": "unsupported", "subagents": "unsupported", "identity_hooks": "unsupported", "permissions": "not-tested", "integrations": "unsupported"}
+        }
+      },
+      "artifact_groups": {
+        "copilot_core": [
+          {"source": "adapters/copilot/copilot-instructions.md", "target": "project", "destination": ".github/copilot-instructions.md", "operation": "install-or-stage"},
+          {"source": "rules/quality.md", "target": "project", "destination": ".github/proptermaltwo/rules/quality.md", "operation": "managed-copy"},
+          {"source": "rules/testing.md", "target": "project", "destination": ".github/proptermaltwo/rules/testing.md", "operation": "managed-copy"},
+          {"source": "rules/glossary.md", "target": "project", "destination": ".github/proptermaltwo/rules/glossary.md", "operation": "managed-copy"},
+          {"source": "rules/comms.md", "target": "project", "destination": ".github/proptermaltwo/rules/comms.md", "operation": "managed-copy"}
+        ]
+      }
+    }
+  },
+  "all_selection": {"claude-code": "full", "codex": "standard", "polytoken": "standard"},
+  "rejections": [
+    {"host": "claude-code", "profile": "core"},
+    {"host": "claude-code", "profile": "standard"},
+    {"host": "copilot", "profile": "standard"},
+    {"host": "copilot", "profile": "full"},
+    {"host": "copilot", "missing_project": true},
+    {"host": "all", "profile": "standard"},
+    {"host": "all", "project": true}
+  ],
+  "unadmitted_skills": ["push", "angel", "retro", "wrap-stale", "gmail", "dashboard", "docket", "dog", "jev", "prose", "style", "chain"],
+  "hook_templates": {
+    "codex": {
+      "hooks": {
+        "PreToolUse": [
+          {"matcher": "^Bash$", "hooks": [{"type": "command", "command": "python3 {{BRIDGE_PATH_SHELL_QUOTED}} --guard push --host codex"}]},
+          {"matcher": "^Bash$", "hooks": [{"type": "command", "command": "python3 {{BRIDGE_PATH_SHELL_QUOTED}} --guard commit --host codex"}]}
+        ]
+      }
+    },
+    "polytoken": [
+      {"name": "proptermaltwo-gh-push-identity", "event": "pre_tool_use", "matcher": "shell_exec", "handler": {"bash": "python3 {{BRIDGE_PATH_SHELL_QUOTED}} --host polytoken --guard push"}},
+      {"name": "proptermaltwo-gh-commit-author", "event": "pre_tool_use", "matcher": "shell_exec", "handler": {"bash": "python3 {{BRIDGE_PATH_SHELL_QUOTED}} --host polytoken --guard commit"}}
+    ]
+  }
+}

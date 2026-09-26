@@ -18,7 +18,71 @@ Hooks import this as a sibling module via a sys.path insert of their own dir.
 
 from __future__ import annotations
 
+import os
 import shlex
+import subprocess
+
+PREFERRED_REPO_KEY = "proptermaltwo.identity"
+LEGACY_REPO_KEY = "claude.identity"
+PREFERRED_MAP_ENV = "PROPTERMALTWO_GH_IDENTITY_MAP"
+LEGACY_MAP_ENV = "CLAUDE_GH_IDENTITY_MAP"
+PREFERRED_IDENTITY_ENV = "PROPTERMALTWO_IDENTITY"
+LEGACY_IDENTITY_ENV = "CLAUDE_IDENTITY"
+PREFERRED_OVERRIDE_ENV = "PROPTERMALTWO_IDENTITY_OVERRIDE"
+LEGACY_OVERRIDE_ENV = "CLAUDE_IDENTITY_OVERRIDE"
+
+
+def preferred_env(preferred: str, legacy: str, default: str | None = None) -> tuple[str | None, str | None]:
+    """Resolve a neutral env name with a legacy fallback.
+
+    Returns (value, conflict_message). The legacy value is considered only when
+    the preferred name is absent. Different simultaneous values are a conflict
+    so callers never silently choose an identity.
+    """
+    preferred_value = os.environ.get(preferred)
+    legacy_value = os.environ.get(legacy)
+    if preferred_value is not None and legacy_value is not None and preferred_value != legacy_value:
+        return None, f"{preferred} and legacy {legacy} are both set to different values"
+    if preferred_value is not None:
+        return preferred_value, None
+    if legacy_value is not None:
+        return legacy_value, None
+    return default, None
+
+
+def preferred_mapping(mapping: dict, preferred: str, legacy: str) -> tuple[str | None, str | None]:
+    """Resolve preferred/legacy names from a parsed command environment."""
+    preferred_value = mapping.get(preferred)
+    legacy_value = mapping.get(legacy)
+    if preferred_value is not None and legacy_value is not None and preferred_value != legacy_value:
+        return None, f"{preferred} and legacy {legacy} have different values"
+    return preferred_value if preferred_value is not None else legacy_value, None
+
+
+def read_repo_identity(top: str) -> tuple[str | None, str | None]:
+    """Read the neutral repo identity with a legacy fallback and conflict check."""
+    values: dict[str, str | None] = {}
+    for key in (PREFERRED_REPO_KEY, LEGACY_REPO_KEY):
+        try:
+            proc = subprocess.run(
+                ["git", "-C", top, "config", "--local", "--get", key],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except (subprocess.SubprocessError, OSError):
+            values[key] = None
+            continue
+        values[key] = proc.stdout.strip() if proc.returncode == 0 and proc.stdout.strip() else None
+    preferred_value = values[PREFERRED_REPO_KEY]
+    legacy_value = values[LEGACY_REPO_KEY]
+    if preferred_value and legacy_value and preferred_value != legacy_value:
+        return None, (
+            f"Repository identity conflict: {PREFERRED_REPO_KEY}={preferred_value!r} "
+            f"but legacy {LEGACY_REPO_KEY}={legacy_value!r}. Remove or align one key."
+        )
+    return preferred_value or legacy_value, None
+
 
 PIPELINE_DELIMS = {"|", "||", "&&", ";", "&"}
 SHELL_RUNNERS = {"bash", "sh", "zsh", "dash"}  # tokens that take -c '<shell>'

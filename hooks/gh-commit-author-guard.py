@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""PreToolUse hook for Bash. Commit-author guard for the multi-account GitHub
-setup on this box.
+"""PreToolUse hook for Bash. Commit-author guard for a multi-identity GitHub
+setup.
 
-Catches `git commit` in a repo whose `claude.identity` tag points to a real
-identity but whose effective git user.name/user.email don't match the identity
-map. A mismatch means the commit would be authored under the wrong name —
+Catches `git commit` in a repo whose preferred `proptermaltwo.identity` tag (or
+legacy `claude.identity` fallback) points to a real identity but whose effective
+git user.name/user.email do not match the identity map. A mismatch means the
+commit would be authored under the wrong name —
 exactly the leak this system exists to prevent (a pseudonymous repo recording
 the real wallet name in commit metadata, or vice versa).
 
@@ -37,15 +38,22 @@ from _gh_identity_common import (  # noqa: E402
     GIT_BARE_GLOBAL_FLAGS,
     GIT_DIR_OPTS,
     GIT_VALUE_GLOBAL_FLAGS,
+    LEGACY_MAP_ENV,
+    PREFERRED_MAP_ENV,
     _base,
     expand_tokens,
     is_assignment as _is_assignment,
+    preferred_env,
+    read_repo_identity,
     segment,
 )
 
-MAP_PATH = os.path.expanduser(
-    os.environ.get("CLAUDE_GH_IDENTITY_MAP", "~/.claude/github-identity-map.json")
-)  # env override lets the test suite (and adopters) point at a fixture map
+_MAP_VALUE, MAP_CONFLICT = preferred_env(
+    PREFERRED_MAP_ENV,
+    LEGACY_MAP_ENV,
+    "~/.claude/github-identity-map.json",
+)
+MAP_PATH = os.path.expanduser(_MAP_VALUE or "~/.claude/github-identity-map.json")
 
 
 def _strip_prefix(seg: list) -> list:
@@ -227,6 +235,8 @@ def evaluate(command: str, cwd: str) -> int:
     if not commits:
         return 0  # allow — no commit-class command
 
+    if MAP_CONFLICT:
+        return 0  # push guard reports and blocks publication on map conflicts
     try:
         with open(MAP_PATH, "r", encoding="utf-8") as f:
             idmap = json.load(f)
@@ -251,8 +261,10 @@ def _check_commit(commit: dict, cwd: str, identities: dict) -> str | None:
     if rc != 0 or not top:
         return None  # not a repo (or unreadable) -> allow; push hook backstops
 
-    rc, tag = _git(["-C", top, "config", "--local", "--get", "claude.identity"])
-    if rc != 0 or not tag:
+    tag, tag_conflict = read_repo_identity(top)
+    if tag_conflict:
+        return tag_conflict
+    if not tag:
         return None  # untagged -> allow (too noisy to block)
 
     entry = identities.get(tag)

@@ -5,32 +5,35 @@ starts cold. With it, a session opens by reading an index, knows what you were
 doing, what you've decided, and how you like to work, and closes by writing the
 deltas back.
 
-Two pieces do the work: **Claude Code's built-in auto-memory** (the engine) and a
-**file convention** plus three **session skills** (the discipline layered on top).
+Two pieces do the work: a **portable file convention** plus host-specific
+**loading and lifecycle adapters**. The content does not belong to any provider.
+How it enters a session differs by host.
 
-## 1. The engine: built-in auto-memory
+## 1. Host loading: automatic versus explicit
 
-Claude Code ships a persistent, file-based memory system. It lives in your Claude
-config dir under a per-project path derived from the working directory, e.g.:
+| Host/profile | Memory behavior |
+|---|---|
+| Claude Code/full | Native, version/config-dependent auto-memory. The conventional per-project path is `$CLAUDE_HOME/projects/<encoded-cwd>/memory/`. |
+| Codex/standard or full | Adapted explicit reads and writes. Set `PROPTERMALTWO_MEMORY_DIR` or name the root in project `AGENTS.md`. |
+| Polytoken/standard or full | Adapted explicit reads and writes using the same convention; no provider or model is pinned. |
+| Codex or Polytoken/core | Memory is not admitted. |
+| Copilot/core preview | Persistent memory and lifecycle skills are unsupported. |
 
-```
-~/.claude/projects/<encoded-cwd>/memory/
-```
+For Claude Code, `<encoded-cwd>` is the project path with slashes turned to
+dashes, so a home session and a project session get different memory roots.
+Claude can auto-load `MEMORY.md` and expose its memory instructions at session
+start. Verify that behavior on the installed version before relying on it.
 
-`<encoded-cwd>` is your project path with slashes turned to dashes, so a `~`
-(home) session and a `~/Projects/foo` session get *different* memory dirs. The
-home-session dir acts as your "central" memory; per-project dirs hold
-project-local state and are auto-loaded when you're in that project.
+Codex and Polytoken do **not** infer or depend on that Claude path. Their global
+instructions and `kickoff`/`wrap` adapters resolve memory from the nearest
+project instruction first, then `PROPTERMALTWO_MEMORY_DIR`; if neither is set,
+they ask instead of guessing. The same portable tree can be shared deliberately,
+or each host/project can use a separate tree. The adapter never requires Claude
+Code, Anthropic, `claude -p`, transcripts, or `~/.claude` runtime state.
 
-The engine auto-loads `MEMORY.md` at the start of every session and gives the
-model instructions for reading and writing typed memory files. You don't
-configure the engine; it's there. This repo adds the *convention* and the
-*rituals* that make it pay off.
-
-This auto-loading behavior is version- and config-dependent, so verify the
-memory dir actually auto-loads on your install before relying on it; if it
-doesn't, the convention still works with a manually-created memory dir and
-explicit reads at session start.
+The standard profile installs `templates/MEMORY.md` into PropterMaltwo's neutral
+shared data home as a bootstrap source. It does not create personal memory or
+choose its location for you.
 
 ## 2. The convention: a two-tier index + typed memory files
 
@@ -132,21 +135,23 @@ time. Verify a recalled fact against current reality before acting on it.
 
 ## 3. The rituals: kickoff / wrap / retro
 
-Three skills (in `skills/`) operate the system:
+The lifecycle surface is host-admitted rather than assumed portable:
 
-- **`/kickoff`** — session start. Reads the hot `MEMORY.md` plus recent handoffs,
-  surfaces background work and flags (retro due, blockers), states understanding,
-  asks the agenda. Turns a cold start into an oriented one. It names `roster.md`
-  and `topics.md` as the on-demand portfolio and topic indexes, and opens them
-  only when the agenda needs something the hot tier doesn't carry — that pointer
-  has to be explicit, because kickoff is otherwise instructed not to go reading
-  extra files.
-- **`/wrap`** — session end. Updates the calibration log, writes/updates memory
-  for what changed, writes a dated `handoff_YYYY-MM-DD.md` so the next session
-  picks up mid-stream, scans commits for decision-record candidates.
-- **`/retro`** — every few days. Safety review, memory maintenance (prune stale,
-  archive overflow), pattern extraction, and a scan of the dev-estimate log so
-  calibration feeds back into future estimates.
+- **`kickoff`** — session start. Reads the hot `MEMORY.md` plus one recent
+  relevant handoff, reports bounded local state, and asks the agenda. Codex and
+  Polytoken use thin adapters that require an explicit root, keep the pass
+  read-only, and do not run external integrations by default.
+- **`wrap`** — session end. Updates only changed memory, writes a concise dated
+  `handoff_YYYY-MM-DD.md`, verifies the working tree, and reports what remains.
+  The Codex and Polytoken adapters never automatically commit, push, publish,
+  discard work, send messages, or launch review subagents.
+- **`retro`** — Claude Code only in this milestone. It performs periodic safety
+  review, memory maintenance, pattern extraction, and calibration review. Codex
+  and Polytoken do not install it, and Copilot has no lifecycle skills.
+
+Both kickoff variants name `roster.md` and `topics.md` as on-demand indexes and
+open them only when the requested work is absent from the hot tier. This pointer
+must be explicit because a bounded orientation should not read the whole tree.
 
 Files these rituals maintain, alongside the typed memories:
 
@@ -160,14 +165,18 @@ Files these rituals maintain, alongside the typed memories:
 
 ## Bootstrapping a fresh machine
 
-1. Make sure your memory dir exists (Claude Code creates the per-project one on
-   first use; for the central home-session dir you can create it yourself).
-2. Copy `templates/MEMORY.md` into it and start filling the two index tables.
-   That's the hot tier. Create empty `roster.md` and `topics.md` beside it; they
-   stay empty until the hot tier has something to demote, which is the right
-   time to start them.
-3. Run `/kickoff` at the start of sessions and `/wrap` at the end. The memory
-   builds itself from there.
+1. Choose a memory root. Claude users may adopt the host-created per-project
+   root. Codex and Polytoken users must set `PROPTERMALTWO_MEMORY_DIR` or name the
+   root in the project's `AGENTS.md`.
+2. Copy `templates/MEMORY.md` (or the installed neutral shared template) into the
+   root and fill the hot index. Create `roster.md` and `topics.md` beside it when
+   the hot tier first needs to demote entries.
+3. On standard/full Claude, Codex, or Polytoken, run `kickoff` at session start
+   and `wrap` at session end. For explicit-read hosts, confirm the skill reports
+   the intended root before allowing writes.
+4. Keep memory outside public repositories unless its contents are meant to be
+   public. It often holds intent, preferences, and external pointers that source
+   control cannot reconstruct.
 
 Not sure what a *good* entry looks like? `templates/examples/` has filled samples
 (a session handoff, a feedback memory with **Why:**/**How to apply:**, a calibration

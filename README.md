@@ -1,188 +1,177 @@
 # PropterMaltwo
 
-My actual Claude Code environment, genericized for sharing. If you sat down at
-a blank machine, this is what you'd lay down to work the way I work. Drop it
-onto `~/.claude`, plug in your own data, and go.
+PropterMaltwo is a portable agent-working environment: shared quality doctrine,
+testing rules, memory conventions, lifecycle practices, and safety guards with
+first-class adapters for **Claude Code, Codex CLI, and Polytoken**. A deliberately
+narrow **GitHub Copilot preview** installs repository instructions only.
 
-Most of how I've gotten better at using Claude Code this year isn't so much my
-personal, human skill improving as it is changes I've made to this environment.
+It began as a genericized snapshot of a real Claude Code setup. Claude remains
+the compatibility baseline, but portable content now has one source and each
+host gets only the thin adapter it needs. Codex and Polytoken do not use Claude
+Code or Anthropic as a hidden backend.
 
-## The basics, if you're new to this
+## Why I built it
 
-Everything I do is a project, and a project is a folder. Each app, bot,
-research question, or one-off pipeline gets its own folder under
-`~/Projects/<name>`, and each folder is a git repo. Claude Code keys on this:
-`cd` into a folder and it loads that project's `CLAUDE.md` and that project's
-memory directory, both tied to the folder path. The global `~/.claude` (what
-this repo is a snapshot of) only holds what applies everywhere: doctrine,
-skills, hooks, and an index of what projects exist and where they stand. I make
-a new folder for basically any new idea. Most of them die, and that's fine.
+I built PropterMaltwo to help myself work better with ADHD. Its central job is
+to preserve intention and context across interruption, make re-entry cheaper,
+and let an agentic harness serve as a universal keyboard across tools that would
+otherwise require repeated manual context switching. The portability and safety
+engineering followed because this became infrastructure I rely on.
 
-I run Claude Code on a headless Linux box and sit at a different machine
-(`<workstation>`) with the browser. A few hooks and skills only exist because
-of that split, like serving a file to the workstation's browser, or running an
-OAuth callback through an SSH tunnel. If you work on one machine you can skip
-those.
+The full first-person account is [Why I built PropterMaltwo: ADHD and agentic
+work](docs/adhd-and-agentic-work.md). The companion [connected-work
+guide](docs/connected-work.md) covers optional communications, calendar, task,
+document, browser, and consent-aware meeting-recording seams. Those connectors
+are not implied features of every host profile; the capability table and
+integration ledger below remain authoritative.
 
-For outside services, I use a plain CLI where a decent one exists, and an MCP
-server where the service actually needs interactive auth. CLIs are cheaper in
-tokens. More importantly, hooks can inspect a shell command before it runs, so
-a CLI is guardable in a way an MCP call isn't. What I actually use:
+## Quick start
 
-- Google (Gmail / Calendar / Tasks / Drive): Google's `gws` CLI
-  (`npm i -g @googleworkspace/cli`). Separate accounts get separate config dirs
-  via `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`, so personal and work tokens never mix.
-  The `/dashboard` and `/docket` skills sit on top of this.
-- Email: a small wrapper that only writes drafts. Nothing gets sent unless I say
-  send it, and two hooks enforce the sharp edges. The draft-first rule is the
-  part worth copying whatever mail tool you use.
-- GitHub: `gh` plus one SSH host alias per account, with the identity-guard
-  hooks (below) checking every push against a per-repo tag.
-- Phone: [ntfy](https://ntfy.sh). Any cron job or hook can curl a topic and it
-  shows up on my phone.
-- Chat platforms and anything OAuth-heavy: MCP servers, configured per-project
-  where possible so a bot's credentials don't ride into unrelated sessions.
-- The web: the built-in fetch/search tools, behind a hook that reminds the model
-  that fetched content is data, not instructions.
-
-Background work is cron. Scheduled jobs run `claude -p` (headless one-shot mode)
-for things like wrapping sessions that ended without a handoff. Long-running
-services are ordinary systemd units. There's no orchestration framework, just
-cron, systemd, and git.
-
-## What's in the `.md` files, and why
-
-`CLAUDE.md` is the global instruction file Claude Code loads for every project.
-Mine is mostly a set of corrections for
-specific, recurring failure modes.
-
-- **Don't anchor dev-time estimates on human timelines.** Models are trained
-  mostly on humans estimating their own dev work, so they inherit a systematic
-  *over*-estimate. Left uncorrected, that bias makes the model recommend
-  deferring or shrinking work it could just ship, and miss trades where upfront
-  development saves substantial compute time. Apply the correction *before*
-  quoting, and track estimate-vs-actual so the calibration is real, not vibes.
-  Quote the *critical path* rather than the sum when subagents run independent
-  tails, and price work in *tool-call rounds* rather than corrected human-minutes.
-- **Cost is price times turns.** A token held in the driver's context is re-read
-  on every later turn. Model choice moves the price; session shape moves the
-  turns. That one fact drives the delegation doctrine (a subagent's context dies
-  with it, so its tool output is paid once), `/clear` at arc boundaries, and the
-  rule that a premium model is a tracked, time-boxed stint and never the saved
-  default.
-- **Evidence tiers for load-bearing claims.** Before relaying anything you'll act
-  on, tag the source: `[ran: …]` (saw it execute) / `[read: file:line]` / `[recalled: …]`.
-  Recalled is the weakest tier; for anything that matters, run the cheap check
-  first. Collapsing these tiers is how confident-but-wrong happens.
-- **A review gate for high-blast-radius decisions.** Before locking in anything
-  downstream will treat as authoritative (an architecture decision, a public
-  message, an irreversible schema change), offer to run the review battery first.
-  The trigger is blast radius, not effort.
-- **Direct communication, Strunk & White density.** Push back on bad ideas, omit
-  needless words, active voice, concrete language. Stated as rules because the
-  default drifts toward hedging and filler.
-- **The 3-strike rule.** If three fixes haven't resolved it, the model of the
-  problem is wrong. Stop and reassess instead of flailing a fourth time.
-
-`rules/quality.md` and `rules/testing.md` go deeper on two of these: a
-quality framework (calibration, falsifiability, verification tier) and testing
-discipline (TDD, mock only the boundaries, colocate tests). `rules/glossary.md`
-pins the meaning of the words that cause bugs when two projects use them
-differently (gate, bounded, dry run vs shadow mode, proposal vs action), and
-`rules/comms.md` covers sweeping a shared message inbox with a per-project
-cursor so one project's acknowledgement can't hide an item from another. All
-four are general doctrine; use them as-is, adapting any examples to your own
-work. `SETUP.md` is the new-project checklist `CLAUDE.md` points at.
-
-Read `CLAUDE.md` itself; it's annotated. The placeholder convention is at the top.
-
-## How the pieces fit
-
-- **`CLAUDE.md` + `rules/`** — the standing doctrine, loaded every session.
-- **The memory system** — cross-session continuity. An always-loaded index points
-  to typed memory files (who you are, how you like to work, project state,
-  external pointers). Three skills operate it: `/kickoff` orients at the start,
-  `/wrap` writes the deltas at the end, `/retro` does periodic maintenance. Full
-  writeup in [`docs/memory-system.md`](docs/memory-system.md). This is the single
-  highest-leverage component: it's what makes session N+1 start warm.
-- **Decision records** — per-project ADRs plus a shared "house" tier, each with
-  a `falsifier_cmd` that a weekly sweep runs (`scripts/adr-sweep.py`) and that
-  `/retro` adjudicates. A decision that can't name the command that would prove
-  it wrong is a vibe with a date on it. Lifecycle in
-  [`docs/decision-records.md`](docs/decision-records.md).
-- **Skills** (`skills/`):
-  - **NineAngel (`/angel`)** — a multi-persona code-review battery with calibrated
-    reviewers and an integrator, plus an optional cross-model second opinion
-    (`--cross`) that reviews the same diff on a different model than Claude. Vendored
-    from its own repo. The headline.
-    Canonical, maintained copy: https://github.com/PropterMalone/NineAngel
-  - **Session trio** — `/kickoff`, `/wrap`, `/retro`.
-  - **Workflow core** — `/code` (delegate a coding task to a subagent to keep the
-    main context clean), `/chain` (run a sequence of audits, each in a fresh
-    subagent), `/status` (one-shot view of live background work), `/style`.
-  - **Integration stubs** — `/gmail`, `/push`, `/prose`, `/dashboard`, `/docket`. These
-    wire to outside tools you supply; they ship as working examples of the
-    pattern, not turnkey features. (`/dashboard` now targets Google Tasks;
-    the Todoist variant was retired after a task-manager migration, and swapping
-    the backend was a one-skill edit, which is the point of the pattern.) See
-    [`docs/integrations.md`](docs/integrations.md).
-- **Hooks** (`hooks/`) — the automation layer that doesn't rely on memory:
-  - **GitHub identity guards** (`gh-identity-guard.py` +
-    `gh-commit-author-guard.py`), and the piece I'd least want to run without if
-    you publish under a pseudonym. A per-repo
-    identity tag (`git config claude.identity <id>`) is validated against a
-    single identity map (`github-identity-map.example.json`) before any
-    push/repo-create/commit: wrong SSH host alias, wrong gh account, wrong
-    author for the tag → deny with a fix-and-retry message. Fail-closed,
-    pure-validator (no side effects), accident-prevention threat model.
-    Static parsing won't stop a determined adversary, but it reliably
-    catches the realistic accident class in testing. Ships with a self-contained
-    behavioral identity suite (`test-gh-identity-hooks.py`). Behavioral tests
-    matter for guards, because a guard broken by a stray refactor fails OPEN
-    and looks identical to a working one.
-  - `angel-multiball-guard.py` — enforces the review-battery floor (single-pass
-    reviews get denied when doctrine says N≥2).
-  - `post-edit-secret-scan.py` — scans every edit for leaked keys.
-  - `post-edit-stub-check.py` — flags TODO/FIXME/unimplemented left behind.
-  - `pre-web-rfip.py` — a prompt-injection defense before web fetches.
-  - `ctx-nudge.sh` — nags once per tier as the driver's cached context grows,
-    with a per-turn cost estimate, and goes quiet after `/clear`.
-  - `log-model-tier.py` — an audit log of premium-model and tier-tagged subagent
-    dispatches. It records the model that ran, because the tag doesn't prove it,
-    and it can't see driver-level spend; both limits are stated in its header.
-  - `sanitize-permission-allowlist.py`, `auto-kickoff.sh`, session telemetry, and
-    optional infra hooks (serve-to-workstation, email guards) that degrade
-    gracefully if you don't use them.
-- **`settings.example.json`** — wires the hooks + statusline and ships a sane
-  permission posture: file edits auto-accept, but force-push / `reset --hard` /
-  `restore` are denied and `rm -rf` / `git push` ask first. (My own config allows
-  all Bash and leans on those rails; the shipped default is more conservative.
-  Widen it once you trust it.)
-
-## Install
+Clone the repository and dry-run before applying:
 
 ```bash
 git clone https://github.com/PropterMalone/PropterMaltwo.git
 cd PropterMaltwo
-./install.sh          # see what it would do, then:
+
+# Backward-compatible Claude Code full install
+./install.sh
 ./install.sh --apply
+
+# Primary first-class adapter
+./install.sh --host polytoken --profile standard
+./install.sh --host polytoken --profile standard --apply
+./install.sh --host polytoken --profile standard --doctor
+
+# Codex first-class adapter
+./install.sh --host codex --profile standard
+./install.sh --host codex --profile standard --apply
+
+# All global first-class hosts; excludes Copilot
+./install.sh --host all
+./install.sh --host all --apply
+
+# Copilot preview is always explicit and project-scoped
+./install.sh --host copilot --profile core --project /path/to/project
+./install.sh --host copilot --profile core --project /path/to/project --apply
 ```
 
-`install.sh` copies the machinery into `~/.claude/`, backing up anything it would
-overwrite. It **never** clobbers your existing `settings.json`; it drops
-`settings.example.json` next to it and tells you what to merge. Re-running is
-safe. See `./install.sh --help`.
+Dry run is the default. Claude accepts only `full`; Codex and Polytoken accept
+`core`, `standard`, and `full` (`full` currently equals `standard`); Copilot
+accepts only project-scoped `core`. `--host all` accepts no profile or project
+and means exactly Claude full + Codex standard + Polytoken standard.
 
-Then make it yours: open `CLAUDE.md` and replace the `<placeholders>`, wire any
-integrations you want ([`docs/integrations.md`](docs/integrations.md)), and start
-a session with `/kickoff`.
+Detailed setup, merge, verification, gaps, and rollback:
 
-## On portability
+- [Claude Code](docs/hosts/claude-code.md)
+- [Codex CLI](docs/hosts/codex.md)
+- [Polytoken](docs/hosts/polytoken.md)
+- [GitHub Copilot preview](docs/hosts/copilot.md)
 
-I genuinely don't know how much of this transfers. A lot of it is shaped to one
-person's brain and one person's failure modes. Take it as a worked example to strip for parts, not a
-framework to adopt whole. The parts I'd bet travel best: the memory system, the
-evidence-tier rule, and NineAngel. The rest, your mileage will vary.
+## Profiles and capabilities
+
+**First-class** means the admitted surface has installer, doctor, rollback,
+deterministic contracts, and an actual-host activation path. **Preview** means a
+useful bounded surface exists without that full admission floor. Static support
+is separate from machine-local activation: installed hooks are not called active
+until a runtime check records `verified-active`.
+
+| Host/profile | Instructions | Skills | Memory | Subagents | Identity hooks | Permissions | Integrations |
+|---|---|---|---|---|---|---|---|
+| Claude Code/full | native | native | native | native | native | native | adapted |
+| Codex/core | native | adapted | unsupported | native | unsupported | native | unsupported |
+| Codex/standard/full | native | adapted | adapted | native | adapted | native | unsupported |
+| Polytoken/core | native | adapted | unsupported | native | unsupported | native | unsupported |
+| Polytoken/standard/full | native | adapted | adapted | native | adapted | native | unsupported |
+| Copilot/core preview | adapted | unsupported | unsupported | unsupported | unsupported | not-tested | unsupported |
+
+Codex and Polytoken core admit exactly `code,status`; standard/full admit exactly
+`code,status,kickoff,wrap`. Memory is explicit-read on those hosts. NineAngel,
+`retro`, `wrap-stale`, `push`, and external email/task/browser workflows remain
+excluded until each has a tested adapter. See the full
+[portability/admission ledger](docs/portability-admission.md).
+
+## Shared core, thin adapters
+
+Portable doctrine stays in `rules/`, the memory convention in `docs/` and
+`templates/`, and portable canonical skills in `skills/`. Host-coupled behavior
+lives under `adapters/`:
+
+- Codex uses its native instruction chain, Agent Skills, subagent mechanism, and
+  user-layer hooks.
+- Polytoken uses its instruction chain, managed-copy skills, shipped
+  `general-purpose` subagent, and shipped `plan` → `execute` facets. The adapter
+  installs no facet or subagent definitions and pins no provider/model.
+- Copilot preview receives one repository instruction and four namespaced rules;
+  it gets no skills, hooks, agents, MCP, or memory.
+
+The installer tracks managed checksums, ownership, backups, and transactions.
+Conflicting new-host instruction/config files are staged as
+`.proptermaltwo.example` fragments rather than overwritten. Uninstall removes
+only unchanged managed content and preserves shared assets still owned by
+another host.
+
+## What the environment contains
+
+### Doctrine
+
+`rules/quality.md`, `rules/testing.md`, `rules/glossary.md`, and `rules/comms.md`
+cover calibration and falsifiability, test discipline, shared terminology, and
+project-scoped communications. Host instruction adapters point to these files;
+they do not duplicate the text.
+
+### Memory and lifecycle
+
+The [memory system](docs/memory-system.md) uses a hot `MEMORY.md`, optional cold
+`roster.md`/`topics.md`, typed topic files, calibration, and concise handoffs.
+Claude can auto-load its memory tree. Codex and Polytoken require an explicit
+memory root in project instructions or `PROPTERMALTWO_MEMORY_DIR`; their thin
+`kickoff` and `wrap` adapters never infer `~/.claude` state.
+
+### Skills
+
+Claude retains the complete existing skill collection. The new first-class
+adapters deliberately admit a smaller tested set:
+
+- `code`: bounded host-native delegation with structured completion;
+- `status`: canonical one-shot background-work view;
+- `kickoff`: bounded explicit-memory orientation;
+- `wrap`: durable handoff/memory closeout with no automatic commit or push.
+
+The remaining skills include the NineAngel review battery, retro, workflow
+helpers, and integration examples. They are not implied portable merely because
+the source exists.
+
+### Safety hooks
+
+The standard Codex and Polytoken profiles install exactly two translated
+pre-shell guards: GitHub push identity and commit-author identity. Both invoke
+one shared bridge and the canonical guard policies. Hook coverage is limited to
+the host's local shell tool path and remains an accident-prevention rail, not an
+adversary-proof sandbox. See each host page for trust/reload and activation
+requirements.
+
+### Optional integrations
+
+Email, Google Workspace, task managers, browser handoff, notifications, MCP, and
+cross-model review require tools and credentials you supply. They are seams, not
+hidden dependencies. [Integrations](docs/integrations.md) names the host/tool
+requirements and support status.
+
+## Make it yours
+
+1. Choose one host page and apply its profile in an isolated or disposable home
+   first.
+2. Run `--doctor`; resolve staged instruction/hook fragments.
+3. For Codex or Polytoken standard, configure an explicit memory root and reload
+   skills/hooks.
+4. Exercise runtime discovery and the hook allow/deny fixtures before relying on
+   them.
+5. Wire only the optional integrations you actually use.
+
+Decision records use falsifiable ADRs; see
+[docs/decision-records.md](docs/decision-records.md). The portability architecture
+is recorded in
+[ADR 01](docs/decisions/01-portable-core-thin-host-adapters.md).
 
 ## License
 

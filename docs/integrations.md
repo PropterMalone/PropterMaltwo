@@ -1,23 +1,47 @@
 # Integrations (the seams)
 
-Some skills wire Claude Code to outside tools: email, a task manager, a browser
-on another machine. These ship as **stubs**: real, working examples of the
-*pattern*, but they depend on tooling and credentials only you can supply. Each
-stub's `SKILL.md` opens with an `INTEGRATION STUB` banner naming its dependency.
-This file is the index of seams and how to plug into them.
+External integrations are optional seams, not dependencies of the portable
+core. The existing email, task, browser, notification, and cross-model examples
+belong to the complete **Claude Code full** source surface. They are not admitted
+by the Codex or Polytoken profiles and are not installed by the Copilot preview.
+No Codex or Polytoken workflow calls Claude Code, `claude -p`, Anthropic, or
+`~/.claude` as a hidden backend.
 
-The point of shipping them at all: they're meaningful parts of how the workflow
-actually runs. Seeing the real shape, even one you can't run as-is, beats a
-vague "you could integrate email here."
+These examples are **stubs**: real choreography whose CLIs, credentials, and
+connectors only you can supply. Each integration skill names its dependency.
+Seeing the real seam beats a vague "you could integrate email here," but source
+presence does not mean host admission.
 
-## The skills and what each needs
+Why connect them at all? A harness can act as a universal keyboard across the
+systems where work already lives, reducing application switching without
+replacing those systems of record. The vendor-neutral [connected-work
+guide](connected-work.md) covers staged authority, project-scoped communications
+capture, draft-first writes, source fidelity, and consent-aware meeting
+recording. It is design guidance, not an expansion of the admitted integration
+surface below.
 
-| Skill | External dependency | What it does |
-|-------|---------------------|--------------|
-| `gmail` | A Gmail/Google Workspace CLI + your Google account. The reference setup uses a `gws`-style CLI wrapped by a local `~/bin/<your-email-cli>` script. | Create email **drafts** (never auto-send), with a mandatory sanitizer and a clobber-guard that refuses to overwrite a draft you hand-edited. |
-| `push` | An SSH-reachable workstation with a browser + a small `serve-to-workstation.sh`. | Serve a local file (HTML/PDF/image) over HTTP through an SSH tunnel so you can view it in your workstation's browser. |
-| `dashboard` | Google Tasks (via the `gws` CLI) + a local `backlog.md`. | Merge your task manager and a local backlog into one prioritized view. Formerly Todoist-backed; the backend swap was a one-skill edit. |
-| `docket` | A planner CLI + a queue tool + calendar access. | A time-aware daily plan that coordinates your day with the agent's background work. |
+## Host support boundary
+
+| Host/profile | Integration status |
+|---|---|
+| Claude Code/full | `adapted`: the shipped stubs and Claude hook wiring are available after you configure their external tools. |
+| Codex/core/standard/full | `unsupported` in this milestone. No integration skill or email/browser/task hook is installed. |
+| Polytoken/core/standard/full | `unsupported` in this milestone. Native tools may be used independently, but PropterMaltwo installs no integration adapter. |
+| Copilot/core preview | `unsupported`; repository instructions only. |
+
+To add an integration to a new host, first specify its tool and credential
+boundary, draft-only/outbound behavior, deterministic tests, and runtime
+admission check; then update the manifest and portability ledger. Do not point a
+new-host adapter at a Claude-side wrapper merely to claim parity.
+
+## The Claude full examples and what each needs
+
+| Skill | Host/tool requirement | What it does |
+|-------|-----------------------|--------------|
+| `gmail` | Claude Code full plus a Gmail/Google Workspace CLI and your account. The reference shape uses a `gws`-style CLI wrapped by a local `<your-email-cli>`. | Create email **drafts** (never auto-send), with a sanitizer and a clobber guard for hand-edited drafts. |
+| `push` | Claude Code full plus an SSH-reachable workstation/browser and a `serve-to-workstation.sh`-style helper. | Serve a local HTML/PDF/image through an SSH tunnel. |
+| `dashboard` | Claude Code full plus Google Tasks through a `gws`-style CLI and a local `backlog.md`. | Merge a task manager and local backlog into a prioritized view. |
+| `docket` | Claude Code full plus your planner CLI, queue tool, and calendar access. | Build a time-aware plan across interactive and background work. |
 
 `docket` and parts of `dashboard`/`status` lean on external planner and queue
 tools that are **not** in this repo. Treat those skills as blueprints: the
@@ -94,12 +118,12 @@ Recommended layout (the reference setup's default):
 The rule behind all of it: a credential should never enter a file the model
 reads, a repo you push, or your shell history.
 
-## Cross-model review (`/angel --cross`)
+## Cross-model review (`/angel --cross`, Claude Code full only)
 
-The `--cross` flag on the NineAngel review battery runs a **second opinion on a
-different model than Claude**, the one model-independence axis a same-model
-persona battery (all personas, all multiball passes, are Claude) structurally
-can't cover. It shells out to an external model CLI over the same diff, gates the
+NineAngel is not admitted in Codex or Polytoken profiles in this milestone. In
+the Claude Code full surface, its `--cross` flag runs a **second opinion on a
+different model than the primary Claude pass**, the model-independence axis a
+same-model persona battery cannot cover. It shells out to an external model CLI over the same diff, gates the
 findings (a verbatim code-quote must match the diff, plus a 0.6-confidence floor),
 and appends them as **advisory**. It never re-ranks or auto-merges into Claude's
 own Top 5.

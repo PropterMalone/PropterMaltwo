@@ -95,21 +95,27 @@ fire_hook() {
   bash -c "$cmd" < "$fixture_path" > "$out_file" 2> "$err_file"
   rc=$?
 
-  local err_lines_after
-  err_lines_after=$(wc -l < "$ERR_LOG" 2>/dev/null || echo 0)
-  local new_err_lines=$((err_lines_after - err_lines_before))
-
   local fail_reasons=()
   if [ "$rc" -ne 0 ]; then
     fail_reasons+=("exit=$rc")
   fi
-  if [ "$new_err_lines" -gt 0 ]; then
-    fail_reasons+=("hook-errors.log+=$new_err_lines")
-  fi
+  # Run the case assertion before measuring hook-error growth. The SessionEnd
+  # assertion deliberately consumes and truncates one documented skip record;
+  # measuring first made that accepted path fail despite the assertion's contract.
   if [ -n "$assert_fn" ]; then
+    HOOK_ASSERT_ERR_LINES_BEFORE="$err_lines_before"
+    export HOOK_ASSERT_ERR_LINES_BEFORE
     if ! "$assert_fn" "$out_file" "$err_file"; then
       fail_reasons+=("assert=$assert_fn")
     fi
+    unset HOOK_ASSERT_ERR_LINES_BEFORE
+  fi
+
+  local err_lines_after
+  err_lines_after=$(wc -l < "$ERR_LOG" 2>/dev/null || echo 0)
+  local new_err_lines=$((err_lines_after - err_lines_before))
+  if [ "$new_err_lines" -gt 0 ]; then
+    fail_reasons+=("hook-errors.log+=$new_err_lines")
   fi
 
   if [ "${#fail_reasons[@]}" -eq 0 ]; then
@@ -257,17 +263,18 @@ assert_session_end_log_or_skip() {
   # We require at least one of those — silent-no-state is the bug from
   # 2026-04-22 that this whole harness exists to catch.
   local log="$PHYLLIS_HOME_TEST/calibration-log.jsonl"
-  if [ -s "$log" ]; then
+  local before_lines="${HOOK_ASSERT_ERR_LINES_BEFORE:-0}"
+  local total_lines
+  total_lines=$(wc -l < "$ERR_LOG" 2>/dev/null || echo 0)
+  local appended=$((total_lines - before_lines))
+  local allowed_ccusage='^\[[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z\] session-end-snapshot\.sh: ERROR: ccusage blocks failed for session=test-fresh-00000000-0000-0000-0000-000000000001$'
+  if [ "$appended" -eq 1 ] && tail -n 1 "$ERR_LOG" | grep -Eq "$allowed_ccusage"; then
+    # Remove only the one full-line accepted record. Preserve all earlier lines.
+    head -n "$before_lines" "$ERR_LOG" > "$ERR_LOG.accepted" 2>/dev/null || : > "$ERR_LOG.accepted"
+    mv "$ERR_LOG.accepted" "$ERR_LOG"
     return 0
   fi
-  if [ -s "$ERR_LOG" ] && grep -q 'session-end-snapshot' "$ERR_LOG"; then
-    # Allowed skip — the hook recorded *why* it didn't write.
-    # But the runner counts "new error lines" as a failure signal, so we
-    # roll those back here: the assert_fn returning 0 says "this skip
-    # was structured, not silent". We adjust err_lines_before by editing
-    # ERR_LOG... no: simplest is to truncate so the runner's diff shows 0.
-    # That's a side effect inside an assert which is ugly but localized.
-    : > "$ERR_LOG"
+  if [ -s "$log" ] && [ "$appended" -eq 0 ]; then
     return 0
   fi
   return 1
