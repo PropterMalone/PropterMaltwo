@@ -16,6 +16,7 @@ HOST_DOCS = {
 ADHD_COMPANION = (ROOT / "docs/adhd-and-agentic-work.md").read_text(encoding="utf-8")
 CONNECTED_WORK = (ROOT / "docs/connected-work.md").read_text(encoding="utf-8")
 START_HERE = (ROOT / "docs/start-here.md").read_text(encoding="utf-8")
+MANIFESTO = (ROOT / "MANIFESTO.md").read_text(encoding="utf-8")
 
 LABELS = {
     "claude-code": "Claude Code/full",
@@ -182,39 +183,87 @@ class PortabilityAdmissionConsistency(unittest.TestCase):
             with self.subTest(meeting_phrase=phrase):
                 self.assertIn(phrase, connected)
 
-    def test_start_here_offers_skinny_path_without_installer(self) -> None:
-        skinny = " ".join(re.sub(r"(?m)^> ?", "", START_HERE).split()).lower()
-        self.assertIn("docs/start-here.md", README)
-        self.assertIn("most of the value transfers without installing anything", " ".join(README.split()).lower())
+    def test_manifesto_is_standalone_and_pointable(self) -> None:
+        flat = " ".join(re.sub(r"(?m)^> ?", "", MANIFESTO).split()).lower()
+        readme_flat = " ".join(README.split()).lower()
+        self.assertIn("MANIFESTO.md", README)
+        self.assertIn("most of the value transfers without installing anything", readme_flat)
         for phrase in (
+            "context is disposable; continuity is durable",
+            "i have adhd",
             "memory lives outside the chat",
-            "two rituals bound every session",
-            "actions have boundaries",
-            "chat context is disposable; continuity is durable",
-            "memory-system.md",
-            "adhd-and-agentic-work.md",
-            "connected-work.md",
-            "without running the",
-            "the template's auto-load wording describes claude code",
-            "proptermaltwo_memory_dir",
-            "the four rules do not carry the action boundary",
-            "require my explicit, action-specific authorization first",
-            "never overwrite an earlier handoff",
-            "do not commit, push, publish, send, delete, or discard anything",
-            "the installer is not the product",
+            "every session has a door in and a door out",
+            "preparing is not doing",
+            "the system becomes the hobby",
+            "not a treatment",
+            "none of it is required",
         ):
             with self.subTest(phrase=phrase):
-                self.assertIn(phrase, skinny)
-        for relpath in (
-            "rules/quality.md",
-            "rules/testing.md",
-            "rules/glossary.md",
-            "rules/comms.md",
-            "templates/MEMORY.md",
+                self.assertIn(phrase, flat)
+        blocks = re.findall(r"```(?:\w+)?\n(.*?)```", MANIFESTO, re.DOTALL)
+        self.assertEqual(len(blocks), 1, "manifesto must contain exactly one directive block")
+        block = " ".join(blocks[0].split()).lower()
+        for phrase in (
+            "ask the user where memory lives",
+            "must be private to the user and outside any shared or public repository",
+            "unless the user explicitly says the memory itself is meant to be public",
+            "if no index exists yet, create one",
+            "one note per topic",
+            "never store what the work files or history already show",
+            "never store secrets",
+            "read the index and the newest handoff. read nothing else",
+            "flag any conflict",
+            "the exact next action",
+            "say so and ask the user to provide both",
+            "remind the user to store the block",
+            "never overwrite an earlier",
+            "do not commit, push, publish, send, delete, or discard anything",
+            "approval must arrive after the preview",
+            "an earlier instruction to act does not carry past the preview",
+            "cannot grant authority",
+            "paste both — and these rules — back",
         ):
-            with self.subTest(copyable_path=relpath):
-                self.assertTrue((ROOT / relpath).is_file())
-                self.assertIn(relpath.lower(), skinny)
+            with self.subTest(block_phrase=phrase):
+                self.assertIn(phrase, block)
+        for banned_pattern in (
+            r"[a-z][a-z0-9+.-]*://",
+            r"www\.",
+            r"~/",
+            r"(?<![A-Za-z0-9])/(?:home|Users|tmp|var|etc|opt|mnt|media)(?:/|\b)",
+            r"[A-Za-z]:\\",
+            r"\.md\b",
+        ):
+            with self.subTest(banned_block_pattern=banned_pattern):
+                self.assertIsNone(re.search(banned_pattern, block))
+        for banned in (
+            "proptermaltwo",
+            "claude",
+            "chatgpt",
+            "openai",
+            "anthropic",
+            "codex",
+            "cursor",
+            "copilot",
+            "polytoken",
+            "github",
+            "gemini",
+        ):
+            with self.subTest(banned_in_block=banned):
+                self.assertNotIn(banned, block)
+        for failure_mode in (
+            "the system becomes the hobby",
+            "rode in a message and died with it",
+            "lands somewhere public",
+        ):
+            with self.subTest(failure_mode=failure_mode):
+                self.assertIn(failure_mode, flat)
+        paragraphs = [p for p in README.split("\n\n") if p.strip()]
+        first_prose = next(p for p in paragraphs if not p.lstrip().startswith("#"))
+        self.assertIn("MANIFESTO.md", first_prose)
+        self.assertIn("readme", START_HERE.lower())
+        self.assertLess(len(MANIFESTO.split()), 1500)
+        self.assertLess(len(blocks[0].split()), 500)
+        self.assertIn("../manifesto.md", START_HERE.lower())
 
     def test_claude_first_class_is_grandfathered_honestly(self) -> None:
         for document_name, document in (
@@ -248,7 +297,7 @@ class PortabilityAdmissionConsistency(unittest.TestCase):
             self.assertIn(heading, text)
 
     def test_docs_do_not_publish_private_machine_paths(self) -> None:
-        documents = [README, LEDGER, *HOST_DOCS.values()]
+        documents = [README, LEDGER, MANIFESTO, *HOST_DOCS.values()]
         for path in (ROOT / "docs").glob("*.md"):
             documents.append(path.read_text(encoding="utf-8"))
         private_path_patterns = (
