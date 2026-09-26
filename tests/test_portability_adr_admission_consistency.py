@@ -15,6 +15,7 @@ HOST_DOCS = {
 }
 ADHD_COMPANION = (ROOT / "docs/adhd-and-agentic-work.md").read_text(encoding="utf-8")
 CONNECTED_WORK = (ROOT / "docs/connected-work.md").read_text(encoding="utf-8")
+START_HERE = (ROOT / "docs/start-here.md").read_text(encoding="utf-8")
 
 LABELS = {
     "claude-code": "Claude Code/full",
@@ -180,6 +181,51 @@ class PortabilityAdmissionConsistency(unittest.TestCase):
         ):
             with self.subTest(meeting_phrase=phrase):
                 self.assertIn(phrase, connected)
+
+    def test_start_here_offers_skinny_path_without_installer(self) -> None:
+        skinny = " ".join(re.sub(r"(?m)^> ?", "", START_HERE).split()).lower()
+        self.assertIn("docs/start-here.md", README)
+        self.assertIn("most of the value transfers without installing anything", " ".join(README.split()).lower())
+        for phrase in (
+            "memory lives outside the chat",
+            "two rituals bound every session",
+            "actions have boundaries",
+            "chat context is disposable; continuity is durable",
+            "memory-system.md",
+            "adhd-and-agentic-work.md",
+            "connected-work.md",
+            "without running the",
+            "the template's auto-load wording describes claude code",
+            "proptermaltwo_memory_dir",
+            "the four rules do not carry the action boundary",
+            "require my explicit, action-specific authorization first",
+            "never overwrite an earlier handoff",
+            "do not commit, push, publish, send, delete, or discard anything",
+            "the installer is not the product",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, skinny)
+        for relpath in (
+            "rules/quality.md",
+            "rules/testing.md",
+            "rules/glossary.md",
+            "rules/comms.md",
+            "templates/MEMORY.md",
+        ):
+            with self.subTest(copyable_path=relpath):
+                self.assertTrue((ROOT / relpath).is_file())
+                self.assertIn(relpath.lower(), skinny)
+
+    def test_claude_first_class_is_grandfathered_honestly(self) -> None:
+        for document_name, document in (
+            ("README", README),
+            ("ledger", LEDGER),
+            ("claude-code", HOST_DOCS["claude-code"]),
+        ):
+            with self.subTest(document=document_name):
+                self.assertIn("grandfather", document.lower())
+                self.assertIn("contract evidence, not", document.lower())
+        self.assertIn("doctor is a presentation layer, not a trust root", " ".join(LEDGER.split()).lower())
 
     def test_portability_adr_is_active_and_falsifiable(self) -> None:
         adr = ROOT / "docs/decisions/01-portable-core-thin-host-adapters.md"

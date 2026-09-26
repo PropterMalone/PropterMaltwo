@@ -1,9 +1,15 @@
 # PropterMaltwo
 
-PropterMaltwo is a portable agent-working environment: shared quality doctrine,
-testing rules, memory conventions, lifecycle practices, and safety guards with
-first-class adapters for **Claude Code, Codex CLI, and Polytoken**. A deliberately
-narrow **GitHub Copilot preview** installs repository instructions only.
+PropterMaltwo is a set of durable working practices for agentic tools — external
+memory, session lifecycle, and action boundaries — shipped as copyable files,
+plus an optional installer with first-class adapters for **Claude Code, Codex
+CLI, and Polytoken**. A deliberately narrow **GitHub Copilot preview** installs
+repository instructions only.
+
+Most of the value transfers without installing anything: read
+[Start here](docs/start-here.md), copy four rule files and a memory template,
+and adopt two session rituals. The installer is for multi-host power users who
+want transactional safety, translated identity hooks, and admission checks.
 
 It began as a genericized snapshot of a real Claude Code setup. Claude remains
 the compatibility baseline, but portable content now has one source and each
@@ -25,7 +31,16 @@ document, browser, and consent-aware meeting-recording seams. Those connectors
 are not implied features of every host profile; the capability table and
 integration ledger below remain authoritative.
 
-## Quick start
+## Start here: adopt the core without the installer
+
+The transferable core is three ideas — memory outside the chat, kickoff/wrap
+rituals, and draft-first action boundaries — plus the files that support them.
+[Start here](docs/start-here.md) gives the fifteen-minute version: what to
+copy, how to seed a memory root, and host-agnostic session skeletons you can
+run as plain prompts. Everything below is for when you want the full
+multi-host machinery instead.
+
+## Install the full environment
 
 Clone the repository and dry-run before applying:
 
@@ -74,6 +89,12 @@ deterministic contracts, and an actual-host activation path. **Preview** means a
 useful bounded surface exists without that full admission floor. Static support
 is separate from machine-local activation: installed hooks are not called active
 until a runtime check records `verified-active`.
+
+Claude Code is the one explicit exception: it is grandfathered as the legacy
+compatibility baseline, backed by long-standing behavioral hook and identity
+suites rather than a host-runtime admission path. That is a stated exception to
+the activation-path floor — contract evidence, not runtime activation. Codex and
+Polytoken carry the admission gates.
 
 | Host/profile | Instructions | Skills | Memory | Subagents | Identity hooks | Permissions | Integrations |
 |---|---|---|---|---|---|---|---|

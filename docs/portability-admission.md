@@ -5,6 +5,11 @@ This ledger records checked-in product support, not machine-local activation.
 outside the manifest; only a fresh host-runtime pass may produce
 `verified-active`.
 
+Doctor is a presentation layer, not a trust root: until a host-specific
+evidence validator is wired into it, doctor renders a claimed `verified-active`
+as `unverified`. The Codex and Polytoken admission runners and the Polytoken
+release gate are what establish and check that evidence today.
+
 ## Status vocabulary
 
 - **first-class**: installer, doctor, rollback, deterministic contracts, and an
@@ -33,6 +38,13 @@ proof of enforcement.
 Codex and Polytoken `full` equal `standard` artifact for artifact. `--host all`
 means exactly `claude-code:full + codex:standard + polytoken:standard`; it accepts
 no profile or project and excludes Copilot.
+
+Claude Code is first-class by a stated grandfathering exception to the
+activation-path floor: it is the compatibility baseline the portable core was
+extracted from, and its evidence is the long-standing behavioral hook and
+identity suites. Those suites invoke the guards directly with fixtures; they are
+contract evidence, not host-runtime activation proof, and no Claude admission
+runner exists in this milestone. Codex and Polytoken carry the admission gates.
 
 ## Static capability ledger
 

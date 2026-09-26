@@ -3,6 +3,13 @@
 Claude Code is a **first-class** PropterMaltwo host and remains the compatibility
 baseline. It supports only the `full` profile.
 
+**Admission status:** Claude Code is first-class by a stated grandfathering
+exception to the activation-path floor. It is the original surface the portable
+core was extracted from. Its evidence is the long-standing behavioral hook and
+identity suites in `hooks/`, which invoke the guards directly with fixtures —
+contract evidence, not host-runtime activation proof. No Claude admission runner
+exists in this milestone; Codex and Polytoken carry the admission gates.
+
 ## Prerequisites and install
 
 - Claude Code installed and authenticated.
